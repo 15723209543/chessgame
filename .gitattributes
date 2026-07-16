@@ -1,0 +1,2 @@
+engines/guojixiangqi/stockfish.exe filter=lfs diff=lfs merge=lfs -text
+engines/weiqi/model.bin.gz filter=lfs diff=lfs merge=lfs -text

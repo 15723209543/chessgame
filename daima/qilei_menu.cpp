@@ -25,10 +25,10 @@ namespace
 
     // qilei_descriptions 保存每张卡片的简短功能说明。
     const std::array<const wchar_t*, 6> qilei_descriptions = {
-        L"Pikafish 引擎 · 红黑对弈",
-        L"Stockfish 引擎 · 标准规则",
-        L"KataGo 引擎 · 19路棋盘",
-        L"Rapfi 引擎 · 15路连珠",
+        L"机器人对弈 · 红黑对弈",
+        L"机器人对弈 · 标准规则",
+        L"机器人对弈 · 19路棋盘",
+        L"机器人对弈 · 15路连珠",
         L"四色竞速 · 骰子与机器人",
         L"星形棋盘 · 多人机器人"
     };

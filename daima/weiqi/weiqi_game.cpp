@@ -211,11 +211,11 @@ int weiqi_session::weiqi_run(const qilei_game_setting& weiqi_setting)
 {
     weiqi_reset_round(weiqi_setting);
     initgraph(weiqi_window_width, weiqi_window_height);
-    SetWindowTextW(GetHWnd(), L"围棋 - KataGo");
+    SetWindowTextW(GetHWnd(), L"围棋 - 机器人");
     BeginBatchDraw();
     if (weiqi_setting.qilei_robot_mode != 0)
     {
-        weiqi_draw(L"正在加载 KataGo 与神经网络…");
+        weiqi_draw(L"正在启动机器人…");
         FlushBatchDraw();
         weiqi_robot_value.weiqi_start();
     }

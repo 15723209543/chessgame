@@ -298,11 +298,16 @@ void guojixiangqi_session::guojixiangqi_log_analysis()
 int guojixiangqi_session::guojixiangqi_run(const qilei_game_setting& guojixiangqi_setting)
 {
     guojixiangqi_reset_round(guojixiangqi_setting);
-    if (guojixiangqi_setting.qilei_robot_mode != 0) guojixiangqi_robot_value.guojixiangqi_start();
-    guojixiangqi_logger.qilei_write(L"机器人：" + guojixiangqi_robot_value.guojixiangqi_engine_name());
     initgraph(guojixiangqi_window_width, guojixiangqi_window_height);
-    SetWindowTextW(GetHWnd(), L"国际象棋 - Stockfish 18");
+    SetWindowTextW(GetHWnd(), L"国际象棋 - 机器人");
     BeginBatchDraw();
+    if (guojixiangqi_setting.qilei_robot_mode != 0)
+    {
+        guojixiangqi_draw(guojixiangqi_setting, L"正在启动机器人…");
+        FlushBatchDraw();
+        guojixiangqi_robot_value.guojixiangqi_start();
+    }
+    guojixiangqi_logger.qilei_write(L"机器人：" + guojixiangqi_robot_value.guojixiangqi_engine_name());
     bool guojixiangqi_running = true; // guojixiangqi_running 表示对局窗口循环是否继续。
     bool guojixiangqi_forced_over = false; // guojixiangqi_forced_over 表示对局是否因超时结束。
     std::wstring guojixiangqi_forced_text; // guojixiangqi_forced_text 是超时结果文字。

@@ -73,7 +73,7 @@ guojixiangqi_move guojixiangqi_robot::guojixiangqi_choose_move(const guojixiangq
 
 std::wstring guojixiangqi_robot::guojixiangqi_engine_name() const
 {
-    return guojixiangqi_stockfish_ready ? L"Stockfish 18" : L"内置 alpha-beta 后备机器人";
+    return L"机器人";
 }
 
 guojixiangqi_move guojixiangqi_robot::guojixiangqi_choose_local(const guojixiangqi_board& guojixiangqi_board_value) const

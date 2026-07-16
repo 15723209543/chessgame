@@ -194,7 +194,7 @@ static void logrobotsetting(loggerstate& logger, const robotsetting& setting)
     }
     else if (setting.mode == robot_mode_both)
     {
-        text += L"红黑双方都由 Pikafish 高质量机器人控制。";
+        text += L"红黑双方都由机器人控制。";
     }
     else
     {
@@ -272,13 +272,13 @@ static bool updaterobotturn(gamestate& state, timestate& timer, loggerstate& log
         int searchms = getrobotsearchms(timer);              // searchms 表示本回合 Pikafish 可用的搜索毫秒数。
         if (!startrobotsearch(state, state.currentcolor, balancedmode, searchms))
         {
-            std::wstring errortext = L"机器人引擎无法启动后台搜索：\n" + getrobotengineerror(); // errortext 表示向玩家显示并写入日志的引擎错误。
+            std::wstring errortext = L"机器人无法启动后台搜索：\n" + getrobotengineerror(); // errortext 表示向玩家显示并写入日志的引擎错误。
             logmessage(logger, errortext);
             state.gameover = true;
             state.winnercolor = getoppositecolor(state.currentcolor);
             stoptimer(timer);
             clearselection(selectedid, moves);
-            MessageBoxW(nullptr, errortext.c_str(), L"Pikafish 引擎错误", MB_OK | MB_ICONERROR);
+            MessageBoxW(nullptr, errortext.c_str(), L"机器人错误", MB_OK | MB_ICONERROR);
             return true;
         }
         clearselection(selectedid, moves);
@@ -294,13 +294,13 @@ static bool updaterobotturn(gamestate& state, timestate& timer, loggerstate& log
         }
         if (!robotrun.move.valid)
         {
-            std::wstring errortext = L"机器人引擎无法给出合法走法：\n" + getrobotengineerror(); // errortext 表示向玩家显示并写入日志的引擎错误。
+            std::wstring errortext = L"机器人无法给出合法走法：\n" + getrobotengineerror(); // errortext 表示向玩家显示并写入日志的引擎错误。
             logmessage(logger, errortext);
             state.gameover = true;
             state.winnercolor = getoppositecolor(state.currentcolor);
             stoptimer(timer);
             clearselection(selectedid, moves);
-            MessageBoxW(nullptr, errortext.c_str(), L"Pikafish 引擎错误", MB_OK | MB_ICONERROR);
+            MessageBoxW(nullptr, errortext.c_str(), L"机器人错误", MB_OK | MB_ICONERROR);
             return true;
         }
         robotrun.phase = robot_phase_wait_select;
@@ -375,8 +375,8 @@ int zhongguoxiangqi_run_impl()
 
     if ((robots.redrobot || robots.blackrobot) && !initrobotengine(getenginefolder()))
     {
-        std::wstring errortext = L"无法启动 Pikafish 高质量象棋引擎：\n" + getrobotengineerror(); // errortext 表示引擎启动失败时的用户提示。
-        MessageBoxW(nullptr, errortext.c_str(), L"Pikafish 引擎错误", MB_OK | MB_ICONERROR);
+        std::wstring errortext = L"无法启动机器人：\n" + getrobotengineerror(); // errortext 表示引擎启动失败时的用户提示。
+        MessageBoxW(nullptr, errortext.c_str(), L"机器人错误", MB_OK | MB_ICONERROR);
         closegraph();
         return 0;
     }

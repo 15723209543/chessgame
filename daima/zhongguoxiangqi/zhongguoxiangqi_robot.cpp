@@ -131,7 +131,7 @@ static bool sendenginecommand(const std::string& command)
     std::lock_guard<std::mutex> writelock(enginewritemutex); // writelock 保证每条 UCI 命令完整写入管道。
     if (engine.inputwrite == nullptr)
     {
-        engine.error = L"Pikafish 输入管道未就绪。";
+        engine.error = L"机器人输入管道未就绪。";
         return false;
     }
 
@@ -140,7 +140,7 @@ static bool sendenginecommand(const std::string& command)
     BOOL result = WriteFile(engine.inputwrite, line.data(), static_cast<DWORD>(line.size()), &writtencount, nullptr); // result 表示管道写入是否成功。
     if (!result || writtencount != line.size())
     {
-        engine.error = L"无法向 Pikafish 发送 UCI 命令。";
+        engine.error = L"无法向机器人发送命令。";
         return false;
     }
     return true;
@@ -198,7 +198,7 @@ static bool readengineline(std::string& line, int timeoutms)
         DWORD available = 0; // available 表示引擎输出管道中待读的字节数。
         if (!PeekNamedPipe(engine.outputread, nullptr, 0, nullptr, &available, nullptr))
         {
-            engine.error = L"Pikafish 输出管道已断开。";
+            engine.error = L"机器人输出管道已断开。";
             return false;
         }
 
@@ -209,7 +209,7 @@ static bool readengineline(std::string& line, int timeoutms)
             DWORD requestcount = available < sizeof(data) ? available : static_cast<DWORD>(sizeof(data)); // requestcount 表示本次请求读取的字节数。
             if (!ReadFile(engine.outputread, data, requestcount, &readcount, nullptr))
             {
-                engine.error = L"读取 Pikafish 输出失败。";
+                engine.error = L"读取机器人输出失败。";
                 return false;
             }
             engine.buffer.append(data, readcount);
@@ -218,13 +218,13 @@ static bool readengineline(std::string& line, int timeoutms)
 
         if (engine.process == nullptr || WaitForSingleObject(engine.process, 0) == WAIT_OBJECT_0)
         {
-            engine.error = L"Pikafish 子进程已提前退出。";
+            engine.error = L"机器人已提前退出。";
             return false;
         }
         Sleep(2);
     }
 
-    engine.error = L"等待 Pikafish 输出超时。";
+    engine.error = L"等待机器人输出超时。";
     return false;
 }
 
@@ -245,7 +245,7 @@ static bool waitengineword(const std::string& word, int timeoutms)
             return true;
         }
     }
-    engine.error = L"Pikafish 未返回预期的 UCI 同步标记。";
+    engine.error = L"机器人未返回预期的同步标记。";
     return false;
 }
 
@@ -260,7 +260,7 @@ bool initrobotengine(const std::wstring& enginefolder)
     std::filesystem::path networkpath = folderpath / L"pikafish.nnue";   // networkpath 表示 Pikafish NNUE 网络文件路径。
     if (!std::filesystem::exists(executablepath) || !std::filesystem::exists(networkpath))
     {
-        return failrobotengine(L"未找到 engine 文件夹中的 pikafish.exe 或 pikafish.nnue。");
+        return failrobotengine(L"未找到机器人运行文件。");
     }
 
     SECURITY_ATTRIBUTES security = {}; // security 表示允许子进程继承管道句柄的安全属性。
@@ -276,7 +276,7 @@ bool initrobotengine(const std::wstring& enginefolder)
     {
         closehandle(childoutputwrite);
         closehandle(childinputread);
-        return failrobotengine(L"创建 Pikafish UCI 通信管道失败。");
+        return failrobotengine(L"创建机器人通信管道失败。");
     }
 
     STARTUPINFOW startup = {}; // startup 保存 Pikafish 子进程的标准输入输出配置。
@@ -294,7 +294,7 @@ bool initrobotengine(const std::wstring& enginefolder)
     closehandle(childinputread);
     if (!created)
     {
-        return failrobotengine(L"启动 Pikafish 子进程失败，请检查 CPU 是否支持 SSE4.1 和 POPCNT。");
+        return failrobotengine(L"启动机器人失败，请检查 CPU 兼容性。");
     }
 
     engine.process = processinfo.hProcess;
@@ -302,7 +302,7 @@ bool initrobotengine(const std::wstring& enginefolder)
     engine.folder = enginefolder;
     if (!sendenginecommand("uci") || !waitengineword("uciok", 8000))
     {
-        return failrobotengine(L"Pikafish UCI 初始化失败。");
+        return failrobotengine(L"机器人初始化失败。");
     }
 
     SYSTEM_INFO systeminfo = {}; // systeminfo 接收当前电脑的逻辑处理器数量。
@@ -320,13 +320,13 @@ bool initrobotengine(const std::wstring& enginefolder)
         !sendenginecommand("setoption name MultiPV value 1") ||
         !sendenginecommand("isready") || !waitengineword("readyok", 12000))
     {
-        return failrobotengine(L"Pikafish NNUE 网络或搜索参数初始化失败。");
+        return failrobotengine(L"机器人搜索参数初始化失败。");
     }
 
     engine.multipv = 1;
     if (!sendenginecommand("ucinewgame") || !sendenginecommand("isready") || !waitengineword("readyok", 5000))
     {
-        return failrobotengine(L"Pikafish 新对局初始化失败。");
+        return failrobotengine(L"机器人新对局初始化失败。");
     }
     engine.ready = true;
     return true;
@@ -456,7 +456,7 @@ static bool searchengine(const gamestate& state, int movetimems, int multipv, st
 {
     if (!engine.ready)
     {
-        engine.error = L"Pikafish 引擎尚未初始化。";
+        engine.error = L"机器人尚未初始化。";
         return false;
     }
 
@@ -507,12 +507,12 @@ static bool searchengine(const gamestate& state, int movetimems, int multipv, st
                 return true;
             }
             enginesearching = false;
-            engine.error = L"Pikafish 认为当前局面没有可走步。";
+            engine.error = L"机器人认为当前局面没有可走步。";
             return false;
         }
     }
     enginesearching = false;
-    engine.error = L"Pikafish 搜索超时。";
+    engine.error = L"机器人搜索超时。";
     return false;
 }
 
@@ -632,7 +632,7 @@ robotmove getbestrobotmove(const gamestate& state, int color, bool balancedmode,
     }
     if (!move.valid)
     {
-        engine.error = L"Pikafish 返回的走法未通过本工程象棋规则校验。";
+        engine.error = L"机器人返回的走法未通过本工程象棋规则校验。";
     }
     return move;
 }
@@ -647,7 +647,7 @@ bool startrobotsearch(const gamestate& state, int color, bool balancedmode, int 
     }
     if (!engine.ready)
     {
-        engine.error = L"Pikafish 引擎尚未初始化。";
+        engine.error = L"机器人尚未初始化。";
         return false;
     }
 

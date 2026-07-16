@@ -196,11 +196,11 @@ int wuziqi_session::wuziqi_run(const qilei_game_setting& wuziqi_setting)
 {
     wuziqi_reset_round(wuziqi_setting);
     initgraph(wuziqi_window_width, wuziqi_window_height);
-    SetWindowTextW(GetHWnd(), L"五子棋 - Rapfi");
+    SetWindowTextW(GetHWnd(), L"五子棋 - 机器人");
     BeginBatchDraw();
     if (wuziqi_setting.qilei_robot_mode != 0)
     {
-        wuziqi_draw(L"正在启动 Rapfi NNUE 引擎…");
+        wuziqi_draw(L"正在启动机器人…");
         FlushBatchDraw();
         wuziqi_robot_value.wuziqi_start();
     }

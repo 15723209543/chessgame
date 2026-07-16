@@ -59,7 +59,7 @@ wuziqi_move wuziqi_robot::wuziqi_choose_move(const wuziqi_board& wuziqi_board_va
 
 std::wstring wuziqi_robot::wuziqi_engine_name() const
 {
-    return wuziqi_rapfi_ready ? L"Rapfi 2025-06-15 NNUE" : L"内置连型启发式机器人";
+    return L"机器人";
 }
 
 int wuziqi_robot::wuziqi_pattern_score(const wuziqi_board& wuziqi_board_value, int wuziqi_row, int wuziqi_col, int wuziqi_stone_value) const

@@ -160,7 +160,7 @@ bool qilei_engine_process::qilei_start(const std::filesystem::path& qilei_execut
     qilei_stop();
     if (!std::filesystem::exists(qilei_executable))
     {
-        qilei_last_error = L"引擎文件不存在：" + qilei_executable.wstring();
+        qilei_last_error = L"机器人文件不存在。";
         return false;
     }
 
@@ -172,7 +172,7 @@ bool qilei_engine_process::qilei_start(const std::filesystem::path& qilei_execut
     if (!CreatePipe(&qilei_input_read, &qilei_input_write, &qilei_security, 0) ||
         !CreatePipe(&qilei_output_read, &qilei_output_write, &qilei_security, 0))
     {
-        qilei_last_error = L"无法创建引擎通信管道。";
+        qilei_last_error = L"无法创建机器人通信管道。";
         if (qilei_input_read) CloseHandle(qilei_input_read);
         if (qilei_output_write) CloseHandle(qilei_output_write);
         qilei_stop();
@@ -201,7 +201,7 @@ bool qilei_engine_process::qilei_start(const std::filesystem::path& qilei_execut
     CloseHandle(qilei_output_write);
     if (!qilei_created)
     {
-        qilei_last_error = L"启动引擎失败，Windows 错误码：" + std::to_wstring(GetLastError());
+        qilei_last_error = L"启动机器人失败，Windows 错误码：" + std::to_wstring(GetLastError());
         qilei_stop("");
         return false;
     }
@@ -217,7 +217,7 @@ bool qilei_engine_process::qilei_send(const std::string& qilei_command)
     DWORD qilei_written = 0; // qilei_written 是实际写入管道的字节数。
     if (!WriteFile(qilei_input_write, qilei_line.data(), static_cast<DWORD>(qilei_line.size()), &qilei_written, nullptr))
     {
-        qilei_last_error = L"向引擎发送命令失败。";
+        qilei_last_error = L"向机器人发送命令失败。";
         return false;
     }
     return qilei_written == qilei_line.size();
@@ -251,7 +251,7 @@ bool qilei_engine_process::qilei_wait_for(const std::string& qilei_marker, unsig
     }
     qilei_output = qilei_pending_output;
     qilei_pending_output.clear();
-    qilei_last_error = L"等待引擎输出超时。";
+    qilei_last_error = L"等待机器人输出超时。";
     return false;
 }
 

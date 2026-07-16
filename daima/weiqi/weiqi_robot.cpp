@@ -94,7 +94,7 @@ weiqi_move weiqi_robot::weiqi_choose_move(const weiqi_board& weiqi_board_value, 
 
 std::wstring weiqi_robot::weiqi_engine_name() const
 {
-    return weiqi_katago_ready ? L"KataGo 1.16.5 + 高强度网络" : L"内置提子启发式机器人";
+    return L"机器人";
 }
 
 weiqi_move weiqi_robot::weiqi_choose_local(const weiqi_board& weiqi_board_value) const

@@ -13,5 +13,5 @@ struct guojixiangqi_analysis_result
     std::wstring guojixiangqi_summary;    // guojixiangqi_summary 是面向玩家的局势结论。
 };
 
-// guojixiangqi_analyze 根据材力、中心控制、机动性、将军和终局状态预测胜负。
+// guojixiangqi_analyze 根据材力、中心控制、兵推进、双象、将军和对局阶段预测胜负。
 guojixiangqi_analysis_result guojixiangqi_analyze(const guojixiangqi_board& guojixiangqi_board_value);

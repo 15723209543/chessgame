@@ -13,5 +13,5 @@ struct wuziqi_analysis_result
     std::wstring wuziqi_summary;    // wuziqi_summary 是面向玩家的局势结论。
 };
 
-// wuziqi_analyze 根据双方活连、眠连、先手和终局状态预测胜负。
+// wuziqi_analyze 根据双方活连、眠连、中心控制、对局阶段和终局状态预测胜负。
 wuziqi_analysis_result wuziqi_analyze(const wuziqi_board& wuziqi_board_value);

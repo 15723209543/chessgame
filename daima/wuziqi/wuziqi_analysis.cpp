@@ -50,6 +50,13 @@ namespace
 wuziqi_analysis_result wuziqi_analyze(const wuziqi_board& wuziqi_board_value)
 {
     wuziqi_analysis_result wuziqi_result; // wuziqi_result 保存本次五子棋局势分析。
+    const int wuziqi_move_count = static_cast<int>(wuziqi_board_value.wuziqi_move_history().size()); // wuziqi_move_count 是当前已经落下的棋子总数。
+    if (wuziqi_move_count == 0)
+    {
+        wuziqi_result.wuziqi_score = 0;
+        wuziqi_result.wuziqi_summary = L"尚未落子，双方机会均等";
+        return wuziqi_result;
+    }
     const int wuziqi_winner_value = wuziqi_board_value.wuziqi_winner(); // wuziqi_winner_value 是当前获胜方棋子编码。
     if (wuziqi_winner_value != 0)
     {
@@ -66,8 +73,21 @@ wuziqi_analysis_result wuziqi_analyze(const wuziqi_board& wuziqi_board_value)
     }
     const int wuziqi_black_score = wuziqi_line_score(wuziqi_board_value, 1); // wuziqi_black_score 是黑方全部连型分数。
     const int wuziqi_white_score = wuziqi_line_score(wuziqi_board_value, 2); // wuziqi_white_score 是白方全部连型分数。
-    wuziqi_result.wuziqi_score = wuziqi_black_score - wuziqi_white_score + (wuziqi_board_value.wuziqi_side() == 0 ? 120 : -120);
-    const double wuziqi_probability = 1.0 / (1.0 + std::exp(-wuziqi_result.wuziqi_score / 4200.0)); // wuziqi_probability 是黑方连型分差折算的胜率。
+    int wuziqi_center_score = 0; // wuziqi_center_score 是双方棋子控制棋盘中心的净评分。
+    for (int wuziqi_row = 0; wuziqi_row < 15; ++wuziqi_row) // wuziqi_row 是中心控制评估的当前行。
+    {
+        for (int wuziqi_col = 0; wuziqi_col < 15; ++wuziqi_col) // wuziqi_col 是中心控制评估的当前列。
+        {
+            const int wuziqi_stone_value = wuziqi_board_value.wuziqi_stone(wuziqi_row, wuziqi_col); // wuziqi_stone_value 是中心评估点上的棋子编码。
+            if (wuziqi_stone_value == 0) continue;
+            const int wuziqi_center_value = std::max(0, 14 - std::abs(wuziqi_row - 7) - std::abs(wuziqi_col - 7)); // wuziqi_center_value 是当前位置靠近中心的价值。
+            wuziqi_center_score += wuziqi_stone_value == 1 ? wuziqi_center_value * 4 : -wuziqi_center_value * 4;
+        }
+    }
+    wuziqi_result.wuziqi_score = wuziqi_black_score - wuziqi_white_score + wuziqi_center_score;
+    const double wuziqi_phase = std::clamp(wuziqi_move_count / 70.0, 0.0, 1.0); // wuziqi_phase 是由布局到决胜阶段的进度系数。
+    const double wuziqi_scale = 6200.0 - 3000.0 * wuziqi_phase; // wuziqi_scale 让少量棋子时的预测更稳定、连型成熟后更敏感。
+    const double wuziqi_probability = 1.0 / (1.0 + std::exp(-wuziqi_result.wuziqi_score / wuziqi_scale)); // wuziqi_probability 是按对局阶段折算的黑方胜率。
     wuziqi_result.wuziqi_black_percent = std::clamp(static_cast<int>(std::lround(wuziqi_probability * 100.0)), 1, 99);
     wuziqi_result.wuziqi_white_percent = 100 - wuziqi_result.wuziqi_black_percent;
     if (std::abs(wuziqi_result.wuziqi_score) < 500) wuziqi_result.wuziqi_summary = L"双方连型接近";

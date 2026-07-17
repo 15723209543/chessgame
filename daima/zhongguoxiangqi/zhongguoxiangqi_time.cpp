@@ -12,6 +12,7 @@ namespace zhongguoxiangqi
 const int option_step = 0;  // option_step 表示每步时长选项。
 const int option_side = 1;  // option_side 表示单方总时长选项。
 const int option_robot = 2; // option_robot 表示机器人数量选项。
+const int option_robot_level = 3; // option_robot_level 表示机器人难度选项。
 
 // optionbutton 保存开局配置页中的一个按钮。
 struct optionbutton
@@ -72,6 +73,18 @@ static std::wstring getoptiontext(const optionbutton& button)
         }
         return L"双方玩家";
     }
+    if (button.mode == option_robot_level)
+    {
+        if (button.value == robot_level_beginner)
+        {
+            return L"入门";
+        }
+        if (button.value == robot_level_advanced)
+        {
+            return L"进阶";
+        }
+        return L"大师";
+    }
     return std::to_wstring(button.value) + L" 秒";
 }
 
@@ -85,6 +98,10 @@ static bool isoptionselected(const optionbutton& button, const timesetting& sett
     if (button.mode == option_robot)
     {
         return robots.mode == button.value;
+    }
+    if (button.mode == option_robot_level)
+    {
+        return robots.level == button.value;
     }
     return setting.stepseconds == button.value;
 }
@@ -129,7 +146,21 @@ static std::wstring getrobotdescription(int mode)
     return L"对战模式：红方玩家  VS  黑方玩家";
 }
 
-// 这个函数绘制包含三组选项的统一开局配置页。
+// 这个函数根据难度编号返回机器人难度说明。
+static std::wstring getrobotleveldescription(int level)
+{
+    if (level == robot_level_beginner)
+    {
+        return L"机器人难度：入门（短搜索并在较宽候选中选择）";
+    }
+    if (level == robot_level_advanced)
+    {
+        return L"机器人难度：进阶（中等搜索并保留少量变化）";
+    }
+    return L"机器人难度：大师（Pikafish NNUE 最优搜索）";
+}
+
+// 这个函数绘制包含四组选项的统一开局配置页。
 static void drawgamesetting(const timesetting& setting, const robotsetting& robots, const std::vector<optionbutton>& buttons,
                             const optionbutton& backbutton, const optionbutton& startbutton, int activegroup)
 {
@@ -137,13 +168,14 @@ static void drawgamesetting(const timesetting& setting, const robotsetting& robo
     setbkcolor(RGB(233, 236, 225));
     cleardevice();
 
-    drawsettingtext(0, 24, window_width - 1, 76, L"欢迎来到中国象棋游戏", RGB(34, 56, 48), 36);
-    drawsettingtext(0, 82, window_width - 1, 108, L"请选择本局游戏配置", RGB(83, 90, 69), 18);
+    drawsettingtext(0, 20, window_width - 1, 66, L"欢迎来到中国象棋游戏", RGB(34, 56, 48), 36);
+    drawsettingtext(0, 70, window_width - 1, 98, L"请选择本局游戏配置", RGB(83, 90, 69), 18);
     int normalcolor = RGB(45, 55, 49); // normalcolor 表示未获得键盘焦点的选项组标题颜色。
     int focuscolor = RGB(174, 38, 38); // focuscolor 表示当前键盘焦点选项组的标题颜色。
-    drawsettingtext(0, 116, window_width - 1, 144, L"每步时长", activegroup == option_step ? focuscolor : normalcolor, 22);
-    drawsettingtext(0, 220, window_width - 1, 248, L"单方总时长", activegroup == option_side ? focuscolor : normalcolor, 22);
-    drawsettingtext(0, 324, window_width - 1, 352, L"对战模式", activegroup == option_robot ? focuscolor : normalcolor, 22);
+    drawsettingtext(0, 106, window_width - 1, 134, L"每步时长", activegroup == option_step ? focuscolor : normalcolor, 22);
+    drawsettingtext(0, 202, window_width - 1, 230, L"单方总时长", activegroup == option_side ? focuscolor : normalcolor, 22);
+    drawsettingtext(0, 298, window_width - 1, 326, L"对战模式", activegroup == option_robot ? focuscolor : normalcolor, 22);
+    drawsettingtext(0, 394, window_width - 1, 422, L"机器人难度", activegroup == option_robot_level ? focuscolor : normalcolor, 22);
 
     for (const optionbutton& button : buttons)
     {
@@ -152,7 +184,8 @@ static void drawgamesetting(const timesetting& setting, const robotsetting& robo
         drawoptionbutton(button, selected, focused);
     }
 
-    drawsettingtext(0, 416, window_width - 1, 444, getrobotdescription(robots.mode), RGB(83, 90, 69), 18);
+    drawsettingtext(0, 486, window_width - 1, 512, getrobotdescription(robots.mode), RGB(83, 90, 69), 18);
+    drawsettingtext(0, 516, window_width - 1, 542, getrobotleveldescription(robots.level), RGB(83, 90, 69), 18);
 
     setfillcolor(RGB(73, 91, 84));
     setlinecolor(RGB(48, 68, 60));
@@ -226,6 +259,7 @@ static void adjustactiveoption(timesetting& setting, robotsetting& robots, int a
     int stepvalues[3] = { 30, 60, 90 }; // stepvalues 保存按从小到大排列的每步时长选项。
     int sidevalues[4] = { 5 * 60, 10 * 60, 15 * 60, 30 * 60 }; // sidevalues 保存按从小到大排列的单方总时长选项。
     int robotvalues[4] = { robot_mode_players, robot_mode_red, robot_mode_black, robot_mode_both }; // robotvalues 保存按界面顺序排列的四种对战模式。
+    int robotlevelvalues[3] = { robot_level_beginner, robot_level_advanced, robot_level_master }; // robotlevelvalues 保存三档机器人难度。
     if (activegroup == option_step)
     {
         setting.stepseconds = getadjustedvalue(stepvalues, 3, setting.stepseconds, direction);
@@ -238,39 +272,46 @@ static void adjustactiveoption(timesetting& setting, robotsetting& robots, int a
     {
         setrobotmode(robots, getadjustedvalue(robotvalues, 4, robots.mode, direction));
     }
+    else if (activegroup == option_robot_level)
+    {
+        setrobotlevel(robots, getadjustedvalue(robotlevelvalues, 3, robots.level, direction));
+    }
 }
 
-// 这个函数让玩家在同一页选择每步时长、单方总时长和对战模式。
+// 这个函数让玩家在同一页选择每步时长、单方总时长、对战模式和三档机器人难度。
 bool choosegamesetting(timesetting& setting, robotsetting& robots)
 {
     setting.stepseconds = 60;
     setting.sideseconds = 10 * 60;
     setrobotmode(robots, robot_mode_players);
+    setrobotlevel(robots, robot_level_master);
 
-    std::vector<optionbutton> buttons; // buttons 保存三组开局配置按钮。
+    std::vector<optionbutton> buttons; // buttons 保存四组开局配置按钮。
     int buttonwidth = 132;             // buttonwidth 表示选项按钮的统一宽度。
     int buttonheight = 48;             // buttonheight 表示选项按钮的统一高度。
     int stepvalues[3] = { 30, 60, 90 }; // stepvalues 保存每步时长选项。
     int sidevalues[4] = { 5 * 60, 10 * 60, 15 * 60, 30 * 60 }; // sidevalues 保存单方总时长选项。
     int robotvalues[4] = { robot_mode_players, robot_mode_red, robot_mode_black, robot_mode_both }; // robotvalues 保存四种对战模式选项。
-    addoptiongroup(buttons, stepvalues, 3, option_step, 152, buttonwidth, buttonheight, 24);
-    addoptiongroup(buttons, sidevalues, 4, option_side, 256, buttonwidth, buttonheight, 20);
-    addoptiongroup(buttons, robotvalues, 4, option_robot, 360, 184, buttonheight, 16);
+    int robotlevelvalues[3] = { robot_level_beginner, robot_level_advanced, robot_level_master }; // robotlevelvalues 保存三档机器人难度选项。
+    addoptiongroup(buttons, stepvalues, 3, option_step, 138, buttonwidth, buttonheight, 24);
+    addoptiongroup(buttons, sidevalues, 4, option_side, 234, buttonwidth, buttonheight, 20);
+    addoptiongroup(buttons, robotvalues, 4, option_robot, 330, 184, buttonheight, 16);
+    addoptiongroup(buttons, robotlevelvalues, 3, option_robot_level, 426, buttonwidth, buttonheight, 24);
 
     optionbutton backbutton;  // backbutton 表示返回六棋大厅按钮。
     optionbutton startbutton; // startbutton 表示开始游戏按钮。
     int startwidth = 240;      // startwidth 表示开始和返回按钮的统一宽度。
     int buttongap = 24;        // buttongap 表示返回按钮与开始按钮之间的水平间距。
     backbutton.left = (window_width - startwidth * 2 - buttongap) / 2;
-    backbutton.top = 478;
+    backbutton.top = 568;
     backbutton.right = backbutton.left + startwidth;
-    backbutton.bottom = 538;
+    backbutton.bottom = 628;
     backbutton.value = 0;
     backbutton.mode = option_step;
     startbutton.left = backbutton.right + buttongap;
-    startbutton.top = 478;
+    startbutton.top = 568;
     startbutton.right = startbutton.left + startwidth;
-    startbutton.bottom = 538;
+    startbutton.bottom = 628;
     startbutton.value = 0;
     startbutton.mode = option_step;
 
@@ -297,6 +338,10 @@ bool choosegamesetting(timesetting& setting, robotsetting& robots)
                     else if (button.mode == option_robot)
                     {
                         setrobotmode(robots, button.value);
+                    }
+                    else if (button.mode == option_robot_level)
+                    {
+                        setrobotlevel(robots, button.value);
                     }
                     else
                     {
@@ -341,7 +386,7 @@ bool choosegamesetting(timesetting& setting, robotsetting& robots)
             }
             else if (message.vkcode == VK_DOWN)
             {
-                activegroup = activegroup < option_robot ? activegroup + 1 : option_robot;
+                activegroup = activegroup < option_robot_level ? activegroup + 1 : option_robot_level;
                 handled = true;
             }
             else if (message.vkcode == VK_LEFT)

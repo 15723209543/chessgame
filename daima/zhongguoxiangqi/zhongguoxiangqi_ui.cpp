@@ -129,6 +129,22 @@ static void drawmoves(const gamestate& state, const std::vector<point>& moves)
     }
 }
 
+// 这个函数在尚未确认的目标点外绘制蓝色轮廓，不提前改变棋盘。
+static void drawpendingmove(bool pendingvisible, const point& pendingpoint)
+{
+    if (!pendingvisible || !isinsideboard(pendingpoint.row, pendingpoint.col))
+    {
+        return;
+    }
+
+    int x = getx(pendingpoint.col); // x 表示待确认落点圆心横坐标。
+    int y = gety(pendingpoint.row); // y 表示待确认落点圆心纵坐标。
+    setlinecolor(RGB(42, 119, 184));
+    setlinestyle(PS_SOLID, 5);
+    circle(x, y, piece_radius);
+    setlinestyle(PS_SOLID, 1);
+}
+
 // 这个函数绘制右侧信息区中的小棋子。
 static void drawsmallpiece(const piece& item, int x, int y)
 {
@@ -227,7 +243,7 @@ static void drawtimerinfo(const timestate& timer)
 }
 
 // 这个函数绘制右侧玩家、按钮和双方棋子列表。
-static void drawpanel(const gamestate& state, const timestate& timer, const buttonrect& undobutton)
+static void drawpanel(const gamestate& state, const timestate& timer, const buttonrect& undobutton, const buttonrect& backbutton)
 {
     setfillcolor(RGB(244, 247, 241));
     solidrectangle(panel_left, 0, window_width, window_height);
@@ -249,7 +265,14 @@ static void drawpanel(const gamestate& state, const timestate& timer, const butt
     setlinestyle(PS_SOLID, 2);
     solidrectangle(undobutton.left, undobutton.top, undobutton.right, undobutton.bottom);
     rectangle(undobutton.left, undobutton.top, undobutton.right, undobutton.bottom);
-    drawcentertext(undobutton.left, undobutton.top, undobutton.right, undobutton.bottom, L"撤回上一步", RGB(255, 255, 255), 20);
+    drawcentertext(undobutton.left, undobutton.top, undobutton.right, undobutton.bottom, L"撤回上一步", RGB(255, 255, 255), 18);
+
+    setfillcolor(RGB(174, 54, 48));
+    setlinecolor(RGB(132, 38, 34));
+    setlinestyle(PS_SOLID, 2);
+    solidrectangle(backbutton.left, backbutton.top, backbutton.right, backbutton.bottom);
+    rectangle(backbutton.left, backbutton.top, backbutton.right, backbutton.bottom);
+    drawcentertext(backbutton.left, backbutton.top, backbutton.right, backbutton.bottom, L"返回主界面", RGB(255, 255, 255), 18);
 
     drawcentertext(panel_left + 28, 168, panel_left + 150, 194, L"红方棋子", RGB(174, 38, 38), 20);
     drawcentertext(panel_left + 190, 168, panel_left + 312, 194, L"黑方棋子", RGB(20, 20, 20), 20);
@@ -306,7 +329,8 @@ static void drawanalysisbar(const analysisresult& analysis)
 }
 
 // 这个函数绘制完整游戏界面。
-void drawgame(const gamestate& state, const timestate& timer, const analysisresult& analysis, int selectedid, const std::vector<point>& moves, const buttonrect& undobutton)
+void drawgame(const gamestate& state, const timestate& timer, const analysisresult& analysis, int selectedid, const std::vector<point>& moves,
+              bool pendingvisible, const point& pendingpoint, const buttonrect& undobutton, const buttonrect& backbutton)
 {
     BeginBatchDraw();
     setbkcolor(RGB(233, 236, 225));
@@ -321,7 +345,8 @@ void drawgame(const gamestate& state, const timestate& timer, const analysisresu
     drawboardlines();
     drawboardpieces(state, selectedid);
     drawmoves(state, moves);
-    drawpanel(state, timer, undobutton);
+    drawpendingmove(pendingvisible, pendingpoint);
+    drawpanel(state, timer, undobutton, backbutton);
     drawanalysisbar(analysis);
     EndBatchDraw();
 }

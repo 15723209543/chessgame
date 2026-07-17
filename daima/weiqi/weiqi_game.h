@@ -38,5 +38,7 @@ private:
     bool weiqi_hint_visible = false;       // weiqi_hint_visible 表示棋盘是否绘制推荐落点。
     weiqi_move weiqi_pending_move;         // weiqi_pending_move 是等待玩家第二次点击确认的落点。
     bool weiqi_pending_visible = false;    // weiqi_pending_visible 表示棋盘是否显示待确认落点轮廓。
+    int weiqi_robot_confirm_phase = 0;     // weiqi_robot_confirm_phase 表示机器人选择落点和确认落子两阶段。
+    unsigned long long weiqi_robot_confirm_tick = 0; // weiqi_robot_confirm_tick 表示机器人当前确认阶段开始时刻。
     std::wstring weiqi_operation_text;     // weiqi_operation_text 保存右侧“本次操作”区域显示的文字。
 };

@@ -4,6 +4,8 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <chrono>
+#include <future>
 
 namespace
 {
@@ -138,7 +140,7 @@ void guojixiangqi_session::guojixiangqi_draw(const qilei_game_setting& guojixian
     settextstyle(18, 0, L"Microsoft YaHei", 0, 0, FW_BOLD, false, false, false);
     outtextxy(guojixiangqi_panel_left + 22, 208, (L"场上 " + std::to_wstring(guojixiangqi_white_pieces) + L" 子 · 吃子 " + std::to_wstring(16 - guojixiangqi_black_pieces)).c_str());
     settextstyle(17, 0, L"Microsoft YaHei");
-    outtextxy(guojixiangqi_panel_left + 22, 238, (L"步时 " + qilei_clock::qilei_format(guojixiangqi_clock_value.qilei_step_remaining) + L" · 局时 " + qilei_clock::qilei_format(guojixiangqi_clock_value.qilei_total_remaining[0])).c_str());
+    outtextxy(guojixiangqi_panel_left + 22, 238, (L"步时 " + qilei_clock::qilei_format(guojixiangqi_clock_value.qilei_step_remaining_by_side[0]) + L" · 局时 " + qilei_clock::qilei_format(guojixiangqi_clock_value.qilei_total_remaining[0])).c_str());
     settextcolor(WHITE);
     settextstyle(21, 0, L"Microsoft YaHei", 0, 0, FW_BOLD, false, false, false);
     outtextxy(guojixiangqi_panel_left + 22, 272, L"黑方状态");
@@ -146,7 +148,7 @@ void guojixiangqi_session::guojixiangqi_draw(const qilei_game_setting& guojixian
     settextstyle(18, 0, L"Microsoft YaHei", 0, 0, FW_BOLD, false, false, false);
     outtextxy(guojixiangqi_panel_left + 22, 302, (L"场上 " + std::to_wstring(guojixiangqi_black_pieces) + L" 子 · 吃子 " + std::to_wstring(16 - guojixiangqi_white_pieces)).c_str());
     settextstyle(17, 0, L"Microsoft YaHei");
-    outtextxy(guojixiangqi_panel_left + 22, 332, (L"步时 " + qilei_clock::qilei_format(guojixiangqi_clock_value.qilei_step_remaining) + L" · 局时 " + qilei_clock::qilei_format(guojixiangqi_clock_value.qilei_total_remaining[1])).c_str());
+    outtextxy(guojixiangqi_panel_left + 22, 332, (L"步时 " + qilei_clock::qilei_format(guojixiangqi_clock_value.qilei_step_remaining_by_side[1]) + L" · 局时 " + qilei_clock::qilei_format(guojixiangqi_clock_value.qilei_total_remaining[1])).c_str());
 
     const guojixiangqi_analysis_result guojixiangqi_analysis = guojixiangqi_analyze(guojixiangqi_board_value); // guojixiangqi_analysis 是当前实时胜负预测。
     settextcolor(RGB(225, 234, 239));
@@ -162,9 +164,6 @@ void guojixiangqi_session::guojixiangqi_draw(const qilei_game_setting& guojixian
     settextcolor(RGB(205, 218, 226));
     settextstyle(18, 0, L"Microsoft YaHei", 0, 0, FW_BOLD, false, false, false);
     outtextxy(guojixiangqi_panel_left + 22, 442, guojixiangqi_analysis.guojixiangqi_summary.c_str());
-    settextstyle(17, 0, L"Microsoft YaHei");
-    RECT guojixiangqi_engine_rect = { guojixiangqi_panel_left + 22, 468, guojixiangqi_window_width - 18, 508 }; // guojixiangqi_engine_rect 是机器人名称区域。
-    drawtext(guojixiangqi_robot_value.guojixiangqi_engine_name().c_str(), &guojixiangqi_engine_rect, DT_LEFT | DT_VCENTER | DT_WORDBREAK);
 
     if (guojixiangqi_promotion_waiting)
     {
@@ -270,6 +269,8 @@ void guojixiangqi_session::guojixiangqi_reset_round(const qilei_game_setting& gu
     guojixiangqi_pending_visible = false;
     guojixiangqi_promotion_waiting = false;
     guojixiangqi_pending_move = {};
+    guojixiangqi_robot_confirm_phase = 0;
+    guojixiangqi_robot_confirm_tick = 0;
     guojixiangqi_operation_text = L"等待白方操作";
     guojixiangqi_logger.qilei_open(L"国际象棋");
     guojixiangqi_logger.qilei_write(L"计时：每步 " + std::to_wstring(guojixiangqi_setting.qilei_step_seconds) + L" 秒，每方 " + std::to_wstring(guojixiangqi_setting.qilei_total_seconds / 60) + L" 分钟。");
@@ -299,7 +300,7 @@ int guojixiangqi_session::guojixiangqi_run(const qilei_game_setting& guojixiangq
 {
     guojixiangqi_reset_round(guojixiangqi_setting);
     initgraph(guojixiangqi_window_width, guojixiangqi_window_height);
-    SetWindowTextW(GetHWnd(), L"国际象棋 - 机器人");
+    SetWindowTextW(GetHWnd(), L"国际象棋");
     BeginBatchDraw();
     if (guojixiangqi_setting.qilei_robot_mode != 0)
     {
@@ -307,12 +308,17 @@ int guojixiangqi_session::guojixiangqi_run(const qilei_game_setting& guojixiangq
         FlushBatchDraw();
         guojixiangqi_robot_value.guojixiangqi_start();
     }
+    guojixiangqi_clock_value.qilei_reset(guojixiangqi_setting, guojixiangqi_board_value.guojixiangqi_side());
     guojixiangqi_logger.qilei_write(L"机器人：" + guojixiangqi_robot_value.guojixiangqi_engine_name());
     bool guojixiangqi_running = true; // guojixiangqi_running 表示对局窗口循环是否继续。
     bool guojixiangqi_forced_over = false; // guojixiangqi_forced_over 表示对局是否因超时结束。
     std::wstring guojixiangqi_forced_text; // guojixiangqi_forced_text 是超时结果文字。
     unsigned long long guojixiangqi_last_draw = 0; // guojixiangqi_last_draw 是上一次刷新界面的毫秒时刻。
     unsigned long long guojixiangqi_next_robot_tick = GetTickCount64(); // guojixiangqi_next_robot_tick 是允许下一方机器人开始计算的最早毫秒时刻，避免双方机器人无间隔连续调度。
+    std::future<guojixiangqi_move> guojixiangqi_robot_future; // guojixiangqi_robot_future 保存后台机器人决策任务。
+    bool guojixiangqi_robot_search_active = false; // guojixiangqi_robot_search_active 表示机器人正在后台决策。
+    unsigned long long guojixiangqi_round_generation = 0; // guojixiangqi_round_generation 用于丢弃悔棋或重开前的过期机器人结果。
+    unsigned long long guojixiangqi_search_generation = 0; // guojixiangqi_search_generation 保存当前后台决策所属局面代数。
     while (guojixiangqi_running)
     {
         const int guojixiangqi_timeout_side = guojixiangqi_clock_value.qilei_update(); // guojixiangqi_timeout_side 是刚超时的一方。
@@ -320,6 +326,11 @@ int guojixiangqi_session::guojixiangqi_run(const qilei_game_setting& guojixiangq
         {
             guojixiangqi_forced_over = true;
             guojixiangqi_forced_text = guojixiangqi_timeout_side == 0 ? L"白方超时，黑方获胜" : L"黑方超时，白方获胜";
+            guojixiangqi_robot_confirm_phase = 0;
+            guojixiangqi_selected = -1;
+            guojixiangqi_targets.clear();
+            guojixiangqi_pending_visible = false;
+            ++guojixiangqi_round_generation;
             guojixiangqi_logger.qilei_write(guojixiangqi_forced_text);
         }
         const bool guojixiangqi_over = guojixiangqi_forced_over || guojixiangqi_board_value.guojixiangqi_game_over(); // guojixiangqi_over 表示对局是否已经结束。
@@ -328,25 +339,75 @@ int guojixiangqi_session::guojixiangqi_run(const qilei_game_setting& guojixiangq
             guojixiangqi_clock_value.qilei_stop();
             guojixiangqi_logger.qilei_write(guojixiangqi_board_value.guojixiangqi_result_text());
         }
-        if (!guojixiangqi_over && GetTickCount64() >= guojixiangqi_next_robot_tick && qilei_side_is_robot(guojixiangqi_setting, guojixiangqi_board_value.guojixiangqi_side()))
+        const unsigned long long guojixiangqi_robot_now = GetTickCount64(); // guojixiangqi_robot_now 是机器人确认流程使用的当前毫秒时刻。
+        if (!guojixiangqi_over && qilei_side_is_robot(guojixiangqi_setting, guojixiangqi_board_value.guojixiangqi_side()))
         {
-            guojixiangqi_draw(guojixiangqi_setting, guojixiangqi_robot_value.guojixiangqi_engine_name() + L" 正在思考…");
-            FlushBatchDraw();
-            const guojixiangqi_move guojixiangqi_robot_move = guojixiangqi_robot_value.guojixiangqi_choose_move(guojixiangqi_board_value, qilei_robot_think_ms(guojixiangqi_setting, 2500)); // guojixiangqi_robot_move 是机器人选出的走法。
-            if (guojixiangqi_clock_value.qilei_update() < 0 && guojixiangqi_robot_move.guojixiangqi_from >= 0 && guojixiangqi_board_value.guojixiangqi_make_move(guojixiangqi_robot_move))
+            if (guojixiangqi_robot_search_active &&
+                guojixiangqi_robot_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
             {
-                const std::string guojixiangqi_uci = guojixiangqi_board::guojixiangqi_to_uci(guojixiangqi_robot_move); // guojixiangqi_uci 是机器人走法的 UCI 文本。
-                guojixiangqi_logger.qilei_write(L"机器人走子：" + std::wstring(guojixiangqi_uci.begin(), guojixiangqi_uci.end()));
-                guojixiangqi_operation_text = L"机器人走子：" + std::wstring(guojixiangqi_uci.begin(), guojixiangqi_uci.end());
-                guojixiangqi_hint_visible = false;
+                guojixiangqi_move guojixiangqi_robot_result{}; // guojixiangqi_robot_result 接收后台线程完成的推荐走法。
+                try
+                {
+                    guojixiangqi_robot_result = guojixiangqi_robot_future.get();
+                }
+                catch (...)
+                {
+                    guojixiangqi_robot_result = {};
+                }
+                guojixiangqi_robot_search_active = false;
+                if (guojixiangqi_search_generation == guojixiangqi_round_generation &&
+                    guojixiangqi_robot_result.guojixiangqi_from >= 0)
+                {
+                    guojixiangqi_pending_move = guojixiangqi_robot_result;
+                    guojixiangqi_selected = guojixiangqi_pending_move.guojixiangqi_from;
+                    guojixiangqi_targets = guojixiangqi_board_value.guojixiangqi_legal_moves_from(guojixiangqi_selected);
+                    guojixiangqi_pending_visible = false;
+                    guojixiangqi_promotion_waiting = false;
+                    guojixiangqi_robot_confirm_phase = 1;
+                    guojixiangqi_robot_confirm_tick = GetTickCount64();
+                    guojixiangqi_operation_text = L"机器人已选中 " + guojixiangqi_square_text(guojixiangqi_selected) + L"，停留 2 秒";
+                }
+            }
+            else if (!guojixiangqi_robot_search_active && guojixiangqi_robot_confirm_phase == 0 &&
+                     guojixiangqi_robot_now >= guojixiangqi_next_robot_tick)
+            {
+                const guojixiangqi_board guojixiangqi_board_copy = guojixiangqi_board_value; // guojixiangqi_board_copy 是交给后台机器人读取的独立棋盘副本。
+                const int guojixiangqi_think_ms = qilei_robot_think_ms(guojixiangqi_setting, 2800); // guojixiangqi_think_ms 把机器人决策硬限制在三秒以内。
+                guojixiangqi_search_generation = guojixiangqi_round_generation;
+                guojixiangqi_robot_future = std::async(std::launch::async, [this, guojixiangqi_board_copy, guojixiangqi_think_ms]()
+                {
+                    return guojixiangqi_robot_value.guojixiangqi_choose_move(guojixiangqi_board_copy, guojixiangqi_think_ms);
+                });
+                guojixiangqi_robot_search_active = true;
+                guojixiangqi_operation_text = L"机器人正在思考（最多 3 秒）…";
+            }
+            else if (guojixiangqi_robot_confirm_phase == 1 && guojixiangqi_robot_now - guojixiangqi_robot_confirm_tick >= 2000)
+            {
+                guojixiangqi_pending_visible = true;
+                guojixiangqi_robot_confirm_phase = 2;
+                guojixiangqi_robot_confirm_tick = guojixiangqi_robot_now;
+                guojixiangqi_operation_text = L"机器人已选择 " + guojixiangqi_square_text(guojixiangqi_pending_move.guojixiangqi_to) + L"，停留 2 秒";
+            }
+            else if (guojixiangqi_robot_confirm_phase == 2 && guojixiangqi_robot_now - guojixiangqi_robot_confirm_tick >= 2000)
+            {
+                const guojixiangqi_move guojixiangqi_robot_move = guojixiangqi_pending_move; // guojixiangqi_robot_move 是完成三阶段确认后准备执行的机器人走法。
+                if (guojixiangqi_clock_value.qilei_update() < 0 && guojixiangqi_board_value.guojixiangqi_make_move(guojixiangqi_robot_move))
+                {
+                    const std::string guojixiangqi_uci = guojixiangqi_board::guojixiangqi_to_uci(guojixiangqi_robot_move); // guojixiangqi_uci 是机器人走法的 UCI 文本。
+                    guojixiangqi_logger.qilei_write(L"机器人走子：" + std::wstring(guojixiangqi_uci.begin(), guojixiangqi_uci.end()));
+                    guojixiangqi_operation_text = L"机器人确认走子：" + std::wstring(guojixiangqi_uci.begin(), guojixiangqi_uci.end());
+                    guojixiangqi_hint_visible = false;
+                    guojixiangqi_log_analysis();
+                    guojixiangqi_clock_value.qilei_switch(guojixiangqi_board_value.guojixiangqi_side());
+                }
                 guojixiangqi_pending_visible = false;
                 guojixiangqi_promotion_waiting = false;
-                guojixiangqi_log_analysis();
-                guojixiangqi_clock_value.qilei_switch(guojixiangqi_board_value.guojixiangqi_side());
+                guojixiangqi_selected = -1;
+                guojixiangqi_targets.clear();
+                guojixiangqi_pending_move = {};
+                guojixiangqi_robot_confirm_phase = 0;
+                guojixiangqi_next_robot_tick = GetTickCount64() + 200;
             }
-            guojixiangqi_selected = -1;
-            guojixiangqi_targets.clear();
-            guojixiangqi_next_robot_tick = GetTickCount64() + 200; // guojixiangqi_next_robot_tick 为下一方保留一次界面刷新和消息处理间隔。
         }
 
         ExMessage guojixiangqi_message; // guojixiangqi_message 是当前鼠标或键盘消息。
@@ -359,10 +420,11 @@ int guojixiangqi_session::guojixiangqi_run(const qilei_game_setting& guojixiangq
                 if (guojixiangqi_choose_promotion(guojixiangqi_piece_type)) guojixiangqi_clock_value.qilei_switch(guojixiangqi_board_value.guojixiangqi_side());
             }
             else if (guojixiangqi_message.message == WM_KEYDOWN && guojixiangqi_message.vkcode == VK_ESCAPE) guojixiangqi_running = false;
-            else if (guojixiangqi_message.message == WM_KEYDOWN && guojixiangqi_message.vkcode == 'H' && !guojixiangqi_over) guojixiangqi_make_hint(guojixiangqi_setting);
+            else if (guojixiangqi_message.message == WM_KEYDOWN && guojixiangqi_message.vkcode == 'H' && !guojixiangqi_over && !guojixiangqi_robot_search_active) guojixiangqi_make_hint(guojixiangqi_setting);
             else if (guojixiangqi_message.message == WM_KEYDOWN && guojixiangqi_message.vkcode == 'N')
             {
                 guojixiangqi_reset_round(guojixiangqi_setting);
+                ++guojixiangqi_round_generation;
                 guojixiangqi_forced_over = false;
                 guojixiangqi_forced_text.clear();
             }
@@ -383,6 +445,10 @@ int guojixiangqi_session::guojixiangqi_run(const qilei_game_setting& guojixiangq
                     guojixiangqi_hint_visible = false;
                     guojixiangqi_pending_visible = false;
                     guojixiangqi_promotion_waiting = false;
+                    guojixiangqi_robot_confirm_phase = 0;
+                    guojixiangqi_selected = -1;
+                    guojixiangqi_targets.clear();
+                    ++guojixiangqi_round_generation;
                     guojixiangqi_operation_text = L"已撤回上一轮走子";
                     guojixiangqi_log_analysis();
                     guojixiangqi_forced_over = false;
@@ -396,12 +462,12 @@ int guojixiangqi_session::guojixiangqi_run(const qilei_game_setting& guojixiangq
                     const int guojixiangqi_promotion_types[4] = { 5, 4, 3, 2 }; // guojixiangqi_promotion_types 按后、车、象、马保存内部棋子编码。
                     if (guojixiangqi_promotion_index >= 0 && guojixiangqi_promotion_index < 4 && guojixiangqi_choose_promotion(guojixiangqi_promotion_types[guojixiangqi_promotion_index])) guojixiangqi_clock_value.qilei_switch(guojixiangqi_board_value.guojixiangqi_side());
                 }
-                else if (guojixiangqi_message.x >= guojixiangqi_panel_left + 18 && guojixiangqi_message.x <= guojixiangqi_panel_left + 152 && guojixiangqi_message.y >= 632 && guojixiangqi_message.y <= 680 && !guojixiangqi_over) guojixiangqi_make_hint(guojixiangqi_setting);
+                else if (guojixiangqi_message.x >= guojixiangqi_panel_left + 18 && guojixiangqi_message.x <= guojixiangqi_panel_left + 152 && guojixiangqi_message.y >= 632 && guojixiangqi_message.y <= 680 && !guojixiangqi_over && !guojixiangqi_robot_search_active) guojixiangqi_make_hint(guojixiangqi_setting);
                 else if (guojixiangqi_message.x >= guojixiangqi_panel_left + 166 && guojixiangqi_message.x <= guojixiangqi_panel_left + 300 && guojixiangqi_message.y >= 632 && guojixiangqi_message.y <= 680)
                 {
-                    if (guojixiangqi_board_value.guojixiangqi_undo()) { if (guojixiangqi_setting.qilei_robot_mode != 0) guojixiangqi_board_value.guojixiangqi_undo(); guojixiangqi_clock_value.qilei_switch(guojixiangqi_board_value.guojixiangqi_side()); guojixiangqi_logger.qilei_write(L"悔棋。"); guojixiangqi_hint_visible = false; guojixiangqi_pending_visible = false; guojixiangqi_promotion_waiting = false; guojixiangqi_operation_text = L"已撤回上一轮走子"; guojixiangqi_log_analysis(); guojixiangqi_forced_over = false; }
+                    if (guojixiangqi_board_value.guojixiangqi_undo()) { if (guojixiangqi_setting.qilei_robot_mode != 0) guojixiangqi_board_value.guojixiangqi_undo(); guojixiangqi_clock_value.qilei_switch(guojixiangqi_board_value.guojixiangqi_side()); guojixiangqi_logger.qilei_write(L"悔棋。"); guojixiangqi_hint_visible = false; guojixiangqi_pending_visible = false; guojixiangqi_promotion_waiting = false; guojixiangqi_robot_confirm_phase = 0; guojixiangqi_selected = -1; guojixiangqi_targets.clear(); ++guojixiangqi_round_generation; guojixiangqi_operation_text = L"已撤回上一轮走子"; guojixiangqi_log_analysis(); guojixiangqi_forced_over = false; }
                 }
-                else if (guojixiangqi_message.x >= guojixiangqi_panel_left + 18 && guojixiangqi_message.x <= guojixiangqi_panel_left + 152 && guojixiangqi_message.y >= 686 && guojixiangqi_message.y <= 734) { guojixiangqi_reset_round(guojixiangqi_setting); guojixiangqi_forced_over = false; guojixiangqi_forced_text.clear(); }
+                else if (guojixiangqi_message.x >= guojixiangqi_panel_left + 18 && guojixiangqi_message.x <= guojixiangqi_panel_left + 152 && guojixiangqi_message.y >= 686 && guojixiangqi_message.y <= 734) { guojixiangqi_reset_round(guojixiangqi_setting); ++guojixiangqi_round_generation; guojixiangqi_forced_over = false; guojixiangqi_forced_text.clear(); }
                 else if (guojixiangqi_message.x >= guojixiangqi_panel_left + 166 && guojixiangqi_message.x <= guojixiangqi_panel_left + 300 && guojixiangqi_message.y >= 686 && guojixiangqi_message.y <= 734 && !guojixiangqi_over) { guojixiangqi_forced_over = true; guojixiangqi_forced_text = guojixiangqi_board_value.guojixiangqi_side() == 0 ? L"白方投降，黑方获胜" : L"黑方投降，白方获胜"; guojixiangqi_operation_text = guojixiangqi_forced_text; guojixiangqi_clock_value.qilei_stop(); guojixiangqi_logger.qilei_write(guojixiangqi_forced_text); }
                 else if (guojixiangqi_message.x >= guojixiangqi_panel_left + 18 && guojixiangqi_message.x <= guojixiangqi_panel_left + 300 && guojixiangqi_message.y >= 740 && guojixiangqi_message.y <= 788) guojixiangqi_running = false;
                 else if (!guojixiangqi_over && !qilei_side_is_robot(guojixiangqi_setting, guojixiangqi_board_value.guojixiangqi_side()) &&
@@ -422,6 +488,12 @@ int guojixiangqi_session::guojixiangqi_run(const qilei_game_setting& guojixiangq
             guojixiangqi_last_draw = guojixiangqi_now;
         }
         Sleep(10);
+    }
+    if (guojixiangqi_robot_search_active && guojixiangqi_robot_future.valid())
+    {
+        guojixiangqi_robot_future.wait();
+        try { (void)guojixiangqi_robot_future.get(); } catch (...) {}
+        guojixiangqi_robot_search_active = false;
     }
     guojixiangqi_clock_value.qilei_stop();
     guojixiangqi_logger.qilei_write(L"窗口关闭。");

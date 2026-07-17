@@ -3,7 +3,9 @@
 #include <graphics.h>
 #include <windows.h>
 
+#include <chrono>
 #include <cmath>
+#include <future>
 
 namespace
 {
@@ -130,7 +132,7 @@ void weiqi_session::weiqi_draw(const std::wstring& weiqi_status) const
     settextstyle(19, 0, L"Microsoft YaHei", 0, 0, FW_BOLD, false, false, false);
     outtextxy(weiqi_panel_left + 24, 214, (L"场上 " + std::to_wstring(weiqi_black_stones) + L" 子 · 提子 " + std::to_wstring(weiqi_board_value.weiqi_capture_count(0))).c_str());
     settextstyle(18, 0, L"Microsoft YaHei");
-    outtextxy(weiqi_panel_left + 24, 244, (L"步时 " + qilei_clock::qilei_format(weiqi_clock_value.qilei_step_remaining) + L" · 局时 " + qilei_clock::qilei_format(weiqi_clock_value.qilei_total_remaining[0])).c_str());
+    outtextxy(weiqi_panel_left + 24, 244, (L"步时 " + qilei_clock::qilei_format(weiqi_clock_value.qilei_step_remaining_by_side[0]) + L" · 局时 " + qilei_clock::qilei_format(weiqi_clock_value.qilei_total_remaining[0])).c_str());
     settextcolor(WHITE);
     settextstyle(21, 0, L"Microsoft YaHei", 0, 0, FW_BOLD, false, false, false);
     outtextxy(weiqi_panel_left + 24, 280, L"白方状态");
@@ -138,7 +140,7 @@ void weiqi_session::weiqi_draw(const std::wstring& weiqi_status) const
     settextstyle(19, 0, L"Microsoft YaHei", 0, 0, FW_BOLD, false, false, false);
     outtextxy(weiqi_panel_left + 24, 310, (L"场上 " + std::to_wstring(weiqi_white_stones) + L" 子 · 提子 " + std::to_wstring(weiqi_board_value.weiqi_capture_count(1))).c_str());
     settextstyle(18, 0, L"Microsoft YaHei");
-    outtextxy(weiqi_panel_left + 24, 340, (L"步时 " + qilei_clock::qilei_format(weiqi_clock_value.qilei_step_remaining) + L" · 局时 " + qilei_clock::qilei_format(weiqi_clock_value.qilei_total_remaining[1])).c_str());
+    outtextxy(weiqi_panel_left + 24, 340, (L"步时 " + qilei_clock::qilei_format(weiqi_clock_value.qilei_step_remaining_by_side[1]) + L" · 局时 " + qilei_clock::qilei_format(weiqi_clock_value.qilei_total_remaining[1])).c_str());
 
     const weiqi_analysis_result weiqi_analysis = weiqi_analyze(weiqi_board_value); // weiqi_analysis 是当前实时胜负预测。
     settextcolor(RGB(225, 234, 239));
@@ -154,9 +156,6 @@ void weiqi_session::weiqi_draw(const std::wstring& weiqi_status) const
     settextcolor(RGB(205, 218, 226));
     settextstyle(18, 0, L"Microsoft YaHei", 0, 0, FW_BOLD, false, false, false);
     outtextxy(weiqi_panel_left + 24, 452, weiqi_analysis.weiqi_summary.c_str());
-    settextstyle(17, 0, L"Microsoft YaHei");
-    RECT weiqi_engine_rect = { weiqi_panel_left + 24, 480, weiqi_window_width - 22, 526 }; // weiqi_engine_rect 是机器人名称区域。
-    drawtext(weiqi_robot_value.weiqi_engine_name().c_str(), &weiqi_engine_rect, DT_LEFT | DT_VCENTER | DT_WORDBREAK);
 
     weiqi_draw_button(weiqi_panel_left + 22, 664, 145, L"停一手 (P)", RGB(54, 132, 102));
     weiqi_draw_button(weiqi_panel_left + 181, 664, 145, L"提示 (H)", RGB(52, 132, 104));
@@ -180,6 +179,8 @@ void weiqi_session::weiqi_reset_round(const qilei_game_setting& weiqi_setting)
     weiqi_hint_visible = false;
     weiqi_pending_visible = false;
     weiqi_pending_move = {};
+    weiqi_robot_confirm_phase = 0;
+    weiqi_robot_confirm_tick = 0;
     weiqi_operation_text = L"等待黑方操作";
     weiqi_logger.qilei_open(L"围棋");
     weiqi_logger.qilei_write(L"计时：每步 " + std::to_wstring(weiqi_setting.qilei_step_seconds) + L" 秒，每方 " + std::to_wstring(weiqi_setting.qilei_total_seconds / 60) + L" 分钟。");
@@ -211,7 +212,7 @@ int weiqi_session::weiqi_run(const qilei_game_setting& weiqi_setting)
 {
     weiqi_reset_round(weiqi_setting);
     initgraph(weiqi_window_width, weiqi_window_height);
-    SetWindowTextW(GetHWnd(), L"围棋 - 机器人");
+    SetWindowTextW(GetHWnd(), L"围棋");
     BeginBatchDraw();
     if (weiqi_setting.qilei_robot_mode != 0)
     {
@@ -219,12 +220,18 @@ int weiqi_session::weiqi_run(const qilei_game_setting& weiqi_setting)
         FlushBatchDraw();
         weiqi_robot_value.weiqi_start();
     }
+    weiqi_clock_value.qilei_reset(weiqi_setting, weiqi_board_value.weiqi_side());
     weiqi_logger.qilei_write(L"机器人：" + weiqi_robot_value.weiqi_engine_name());
     bool weiqi_running = true; // weiqi_running 表示围棋窗口循环是否继续。
     bool weiqi_forced_over = false; // weiqi_forced_over 表示是否因超时强制结束。
     std::wstring weiqi_forced_text; // weiqi_forced_text 是超时结果文字。
     bool weiqi_result_logged = false; // weiqi_result_logged 防止终局结果被重复写入日志。
     unsigned long long weiqi_last_draw = 0; // weiqi_last_draw 是上一次界面刷新时刻。
+    unsigned long long weiqi_next_robot_tick = GetTickCount64(); // weiqi_next_robot_tick 是下一次机器人可以开始选点的时刻。
+    std::future<weiqi_move> weiqi_robot_future; // weiqi_robot_future 保存后台机器人决策任务。
+    bool weiqi_robot_search_active = false; // weiqi_robot_search_active 表示机器人当前正在后台计算落点。
+    unsigned long long weiqi_round_generation = 0; // weiqi_round_generation 用于识别重开、悔棋前的过期机器人结果。
+    unsigned long long weiqi_search_generation = 0; // weiqi_search_generation 保存当前后台任务所属的局面代数。
     while (weiqi_running)
     {
         const int weiqi_timeout_side = weiqi_clock_value.qilei_update(); // weiqi_timeout_side 是刚超时的一方。
@@ -232,6 +239,10 @@ int weiqi_session::weiqi_run(const qilei_game_setting& weiqi_setting)
         {
             weiqi_forced_over = true;
             weiqi_forced_text = weiqi_timeout_side == 0 ? L"黑方超时，白方获胜" : L"白方超时，黑方获胜";
+            weiqi_pending_visible = false;
+            weiqi_pending_move = {};
+            weiqi_robot_confirm_phase = 0;
+            ++weiqi_round_generation;
             weiqi_logger.qilei_write(weiqi_forced_text);
         }
         if (weiqi_board_value.weiqi_game_over() && !weiqi_result_logged)
@@ -241,20 +252,70 @@ int weiqi_session::weiqi_run(const qilei_game_setting& weiqi_setting)
             weiqi_result_logged = true;
         }
         const bool weiqi_over = weiqi_forced_over || weiqi_board_value.weiqi_game_over(); // weiqi_over 表示对局是否已结束。
+        const unsigned long long weiqi_robot_now = GetTickCount64(); // weiqi_robot_now 是机器人确认流程使用的当前毫秒时刻。
+        if (weiqi_robot_search_active &&
+            weiqi_robot_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
+        {
+            weiqi_move weiqi_robot_result{}; // weiqi_robot_result 接收后台线程完成的机器人落点。
+            try
+            {
+                weiqi_robot_result = weiqi_robot_future.get();
+            }
+            catch (...)
+            {
+                weiqi_robot_result = {};
+            }
+            weiqi_robot_search_active = false;
+            const bool weiqi_result_current = weiqi_search_generation == weiqi_round_generation && !weiqi_over &&
+                qilei_side_is_robot(weiqi_setting, weiqi_board_value.weiqi_side()); // weiqi_result_current 表示后台结果仍属于当前机器人局面。
+            const bool weiqi_result_valid = weiqi_robot_result.weiqi_pass ||
+                (weiqi_robot_result.weiqi_row >= 0 && weiqi_robot_result.weiqi_row < 19 &&
+                 weiqi_robot_result.weiqi_col >= 0 && weiqi_robot_result.weiqi_col < 19); // weiqi_result_valid 检查返回的是停一手或棋盘内落点。
+            if (weiqi_result_current && weiqi_result_valid)
+            {
+                weiqi_pending_move = weiqi_robot_result;
+                weiqi_pending_visible = !weiqi_pending_move.weiqi_pass;
+                weiqi_robot_confirm_phase = 1;
+                weiqi_robot_confirm_tick = GetTickCount64();
+                weiqi_operation_text = weiqi_pending_move.weiqi_pass ? L"机器人已选择停一手，停留 2 秒" :
+                    L"机器人已选择 " + std::wstring(1, weiqi_column_text(weiqi_pending_move.weiqi_col)) +
+                    std::to_wstring(19 - weiqi_pending_move.weiqi_row) + L"，停留 2 秒";
+            }
+            else
+            {
+                weiqi_next_robot_tick = GetTickCount64() + 200;
+            }
+        }
         if (!weiqi_over && qilei_side_is_robot(weiqi_setting, weiqi_board_value.weiqi_side()))
         {
-            weiqi_draw(weiqi_robot_value.weiqi_engine_name() + L" 正在思考…");
-            FlushBatchDraw();
-            const weiqi_move weiqi_robot_move = weiqi_robot_value.weiqi_choose_move(weiqi_board_value, qilei_robot_think_ms(weiqi_setting, 2800)); // weiqi_robot_move 是机器人选出的落子或停手。
-            if (weiqi_clock_value.qilei_update() < 0 && weiqi_board_value.weiqi_play(weiqi_robot_move))
+            if (!weiqi_robot_search_active && weiqi_robot_confirm_phase == 0 && weiqi_robot_now >= weiqi_next_robot_tick)
             {
-                weiqi_log_move(L"机器人", weiqi_robot_move);
-                weiqi_operation_text = weiqi_robot_move.weiqi_pass ? L"机器人选择停一手" :
-                    L"机器人落子：" + std::wstring(1, weiqi_column_text(weiqi_robot_move.weiqi_col)) + std::to_wstring(19 - weiqi_robot_move.weiqi_row);
-                weiqi_hint_visible = false;
+                const weiqi_board weiqi_board_copy = weiqi_board_value; // weiqi_board_copy 是交给后台机器人读取的独立棋盘副本。
+                const int weiqi_think_ms = qilei_robot_think_ms(weiqi_setting, 2800); // weiqi_think_ms 把机器人决策限制在三秒以内。
+                weiqi_search_generation = weiqi_round_generation;
+                weiqi_robot_future = std::async(std::launch::async, [this, weiqi_board_copy, weiqi_think_ms]()
+                {
+                    return weiqi_robot_value.weiqi_choose_move(weiqi_board_copy, weiqi_think_ms);
+                });
+                weiqi_robot_search_active = true;
+                weiqi_operation_text = L"机器人正在思考（最多 3 秒）…";
+            }
+            else if (weiqi_robot_confirm_phase == 1 && weiqi_robot_now - weiqi_robot_confirm_tick >= 2000)
+            {
+                const weiqi_move weiqi_robot_move = weiqi_pending_move; // weiqi_robot_move 是显示落点轮廓并确认后的机器人走法。
+                if (weiqi_clock_value.qilei_update() < 0 && weiqi_board_value.weiqi_play(weiqi_robot_move))
+                {
+                    weiqi_log_move(L"机器人", weiqi_robot_move);
+                    weiqi_operation_text = weiqi_robot_move.weiqi_pass ? L"机器人确认停一手" :
+                        L"机器人确认落子：" + std::wstring(1, weiqi_column_text(weiqi_robot_move.weiqi_col)) + std::to_wstring(19 - weiqi_robot_move.weiqi_row);
+                    weiqi_hint_visible = false;
+                    weiqi_log_analysis();
+                    weiqi_clock_value.qilei_switch(weiqi_board_value.weiqi_side());
+                }
                 weiqi_pending_visible = false;
-                weiqi_log_analysis();
-                weiqi_clock_value.qilei_switch(weiqi_board_value.weiqi_side());
+                weiqi_pending_move = {};
+                weiqi_robot_confirm_phase = 0;
+                weiqi_next_robot_tick = GetTickCount64() + 200;
             }
         }
 
@@ -262,8 +323,8 @@ int weiqi_session::weiqi_run(const qilei_game_setting& weiqi_setting)
         while (peekmessage(&weiqi_message, EM_MOUSE | EM_KEY))
         {
             if (weiqi_message.message == WM_KEYDOWN && weiqi_message.vkcode == VK_ESCAPE) weiqi_running = false;
-            else if (weiqi_message.message == WM_KEYDOWN && weiqi_message.vkcode == 'H' && !weiqi_over) weiqi_make_hint(weiqi_setting);
-            else if (weiqi_message.message == WM_KEYDOWN && weiqi_message.vkcode == 'N') { weiqi_reset_round(weiqi_setting); weiqi_forced_over = false; weiqi_forced_text.clear(); weiqi_result_logged = false; }
+            else if (weiqi_message.message == WM_KEYDOWN && weiqi_message.vkcode == 'H' && !weiqi_over && !weiqi_robot_search_active) weiqi_make_hint(weiqi_setting);
+            else if (weiqi_message.message == WM_KEYDOWN && weiqi_message.vkcode == 'N') { weiqi_reset_round(weiqi_setting); ++weiqi_round_generation; weiqi_forced_over = false; weiqi_forced_text.clear(); weiqi_result_logged = false; }
             else if (weiqi_message.message == WM_KEYDOWN && weiqi_message.vkcode == 'R' && !weiqi_over) { weiqi_forced_over = true; weiqi_forced_text = weiqi_board_value.weiqi_side() == 0 ? L"黑方投降，白方获胜" : L"白方投降，黑方获胜"; weiqi_clock_value.qilei_stop(); weiqi_logger.qilei_write(weiqi_forced_text); }
             else if ((weiqi_message.message == WM_KEYDOWN && weiqi_message.vkcode == 'P') ||
                      (weiqi_message.message == WM_LBUTTONDOWN && weiqi_message.x >= weiqi_panel_left + 22 && weiqi_message.x <= weiqi_panel_left + 167 && weiqi_message.y >= 664 && weiqi_message.y <= 712))
@@ -290,14 +351,17 @@ int weiqi_session::weiqi_run(const qilei_game_setting& weiqi_setting)
                     weiqi_logger.qilei_write(L"悔棋。");
                     weiqi_hint_visible = false;
                     weiqi_pending_visible = false;
+                    weiqi_pending_move = {};
+                    weiqi_robot_confirm_phase = 0;
+                    ++weiqi_round_generation;
                     weiqi_operation_text = L"已撤回上一轮走子";
                     weiqi_log_analysis();
                     weiqi_forced_over = false;
                     weiqi_result_logged = false;
                 }
             }
-            else if (weiqi_message.message == WM_LBUTTONDOWN && weiqi_message.x >= weiqi_panel_left + 181 && weiqi_message.x <= weiqi_panel_left + 326 && weiqi_message.y >= 664 && weiqi_message.y <= 712 && !weiqi_over) weiqi_make_hint(weiqi_setting);
-            else if (weiqi_message.message == WM_LBUTTONDOWN && weiqi_message.x >= weiqi_panel_left + 181 && weiqi_message.x <= weiqi_panel_left + 326 && weiqi_message.y >= 718 && weiqi_message.y <= 766) { weiqi_reset_round(weiqi_setting); weiqi_forced_over = false; weiqi_forced_text.clear(); weiqi_result_logged = false; }
+            else if (weiqi_message.message == WM_LBUTTONDOWN && weiqi_message.x >= weiqi_panel_left + 181 && weiqi_message.x <= weiqi_panel_left + 326 && weiqi_message.y >= 664 && weiqi_message.y <= 712 && !weiqi_over && !weiqi_robot_search_active) weiqi_make_hint(weiqi_setting);
+            else if (weiqi_message.message == WM_LBUTTONDOWN && weiqi_message.x >= weiqi_panel_left + 181 && weiqi_message.x <= weiqi_panel_left + 326 && weiqi_message.y >= 718 && weiqi_message.y <= 766) { weiqi_reset_round(weiqi_setting); ++weiqi_round_generation; weiqi_forced_over = false; weiqi_forced_text.clear(); weiqi_result_logged = false; }
             else if (weiqi_message.message == WM_LBUTTONDOWN && weiqi_message.x >= weiqi_panel_left + 22 && weiqi_message.x <= weiqi_panel_left + 167 && weiqi_message.y >= 772 && weiqi_message.y <= 820 && !weiqi_over) { weiqi_forced_over = true; weiqi_forced_text = weiqi_board_value.weiqi_side() == 0 ? L"黑方投降，白方获胜" : L"白方投降，黑方获胜"; weiqi_operation_text = weiqi_forced_text; weiqi_clock_value.qilei_stop(); weiqi_logger.qilei_write(weiqi_forced_text); }
             else if (weiqi_message.message == WM_LBUTTONDOWN && weiqi_message.x >= weiqi_panel_left + 181 && weiqi_message.x <= weiqi_panel_left + 326 && weiqi_message.y >= 772 && weiqi_message.y <= 820) weiqi_running = false;
             else if (weiqi_message.message == WM_LBUTTONDOWN && !weiqi_over && !qilei_side_is_robot(weiqi_setting, weiqi_board_value.weiqi_side()))
@@ -341,6 +405,12 @@ int weiqi_session::weiqi_run(const qilei_game_setting& weiqi_setting)
             weiqi_last_draw = weiqi_now;
         }
         Sleep(10);
+    }
+    if (weiqi_robot_search_active && weiqi_robot_future.valid())
+    {
+        weiqi_robot_future.wait();
+        try { (void)weiqi_robot_future.get(); } catch (...) {}
+        weiqi_robot_search_active = false;
     }
     weiqi_clock_value.qilei_stop();
     weiqi_logger.qilei_write(L"窗口关闭。");

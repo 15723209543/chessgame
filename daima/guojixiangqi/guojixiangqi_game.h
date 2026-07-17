@@ -48,5 +48,7 @@ private:
     guojixiangqi_move guojixiangqi_pending_move;           // guojixiangqi_pending_move 是等待再次点击或选择升变的走法。
     bool guojixiangqi_pending_visible = false;             // guojixiangqi_pending_visible 表示终点格是否只显示确认轮廓。
     bool guojixiangqi_promotion_waiting = false;           // guojixiangqi_promotion_waiting 表示右侧正在等待升变类型。
+    int guojixiangqi_robot_confirm_phase = 0;              // guojixiangqi_robot_confirm_phase 表示机器人选子、选落点、确认三阶段。
+    unsigned long long guojixiangqi_robot_confirm_tick = 0;// guojixiangqi_robot_confirm_tick 表示机器人当前确认阶段开始时刻。
     std::wstring guojixiangqi_operation_text;              // guojixiangqi_operation_text 保存右侧“本次操作”文字。
 };

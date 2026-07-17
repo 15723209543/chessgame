@@ -68,26 +68,63 @@ weiqi_move weiqi_robot::weiqi_from_gtp(std::string weiqi_text)
 
 weiqi_move weiqi_robot::weiqi_choose_move(const weiqi_board& weiqi_board_value, int weiqi_think_ms)
 {
+    const unsigned long long weiqi_decision_deadline = GetTickCount64() + 2600ULL; // weiqi_decision_deadline 为本次机器人决策保留四百毫秒停止与回退余量。
+    const auto weiqi_remaining_ms = [&weiqi_decision_deadline]() -> unsigned long long // weiqi_remaining_ms 返回本次三秒决策仍可使用的毫秒数。
+    {
+        const unsigned long long weiqi_now = GetTickCount64(); // weiqi_now 是计算本次决策剩余时间时的毫秒时刻。
+        return weiqi_now < weiqi_decision_deadline ? weiqi_decision_deadline - weiqi_now : 0ULL;
+    };
+    const auto weiqi_fast_fallback = [&weiqi_board_value]() -> weiqi_move // weiqi_fast_fallback 在外部机器人超时时快速选择靠近中心的合法点。
+    {
+        for (int weiqi_distance = 0; weiqi_distance <= 18; ++weiqi_distance) // weiqi_distance 是从棋盘中心向外扫描的曼哈顿距离。
+        {
+            for (int weiqi_row = 0; weiqi_row < 19; ++weiqi_row) // weiqi_row 是快速回退正在检查的棋盘行。
+            {
+                for (int weiqi_col = 0; weiqi_col < 19; ++weiqi_col) // weiqi_col 是快速回退正在检查的棋盘列。
+                {
+                    if (std::abs(weiqi_row - 9) + std::abs(weiqi_col - 9) == weiqi_distance &&
+                        weiqi_board_value.weiqi_legal(weiqi_row, weiqi_col))
+                    {
+                        return { weiqi_row, weiqi_col, false };
+                    }
+                }
+            }
+        }
+        return { -1, -1, true };
+    };
     if (weiqi_katago_ready && weiqi_engine.qilei_running())
     {
         std::string weiqi_response; // weiqi_response 接收局面重放与 genmove 应答。
-        if (!weiqi_gtp("clear_board", weiqi_response, 5000)) weiqi_katago_ready = false;
+        if (!weiqi_gtp("clear_board", weiqi_response, weiqi_remaining_ms())) weiqi_katago_ready = false;
         int weiqi_side_value = 0; // weiqi_side_value 是重放历史时当前步所属方。
         for (const weiqi_move& weiqi_move_value : weiqi_board_value.weiqi_move_history()) // weiqi_move_value 是向 KataGo 重放的历史步骤。
         {
-            if (!weiqi_gtp(std::string("play ") + (weiqi_side_value == 0 ? "B " : "W ") + weiqi_to_gtp(weiqi_move_value), weiqi_response, 5000)) { weiqi_katago_ready = false; break; }
+            const unsigned long long weiqi_replay_remaining = weiqi_remaining_ms(); // weiqi_replay_remaining 是重放本步历史前剩余的决策毫秒数。
+            if (weiqi_replay_remaining == 0 ||
+                !weiqi_gtp(std::string("play ") + (weiqi_side_value == 0 ? "B " : "W ") + weiqi_to_gtp(weiqi_move_value), weiqi_response, weiqi_replay_remaining))
+            {
+                weiqi_katago_ready = false;
+                break;
+            }
             weiqi_side_value = 1 - weiqi_side_value;
         }
         if (weiqi_katago_ready)
         {
-            weiqi_gtp("kata-set-param maxTime " + std::to_string(std::max(0.2, weiqi_think_ms / 1000.0)), weiqi_response, 5000);
-            if (weiqi_gtp(std::string("genmove ") + (weiqi_board_value.weiqi_side() == 0 ? "B" : "W"), weiqi_response, static_cast<unsigned long long>(weiqi_think_ms + 120000)))
+            const unsigned long long weiqi_before_search_remaining = weiqi_remaining_ms(); // weiqi_before_search_remaining 是配置搜索时间前剩余的决策毫秒数。
+            const int weiqi_bounded_think_ms = std::max(200, std::min<int>(weiqi_think_ms,
+                weiqi_before_search_remaining > 180 ? static_cast<int>(weiqi_before_search_remaining - 180) : 200)); // weiqi_bounded_think_ms 保证搜索和协议应答合计不超过三秒。
+            if (weiqi_before_search_remaining > 200 &&
+                weiqi_gtp("kata-set-param maxTime " + std::to_string(weiqi_bounded_think_ms / 1000.0), weiqi_response,
+                    std::min<unsigned long long>(150ULL, weiqi_remaining_ms())) &&
+                weiqi_gtp(std::string("genmove ") + (weiqi_board_value.weiqi_side() == 0 ? "B" : "W"), weiqi_response, weiqi_remaining_ms()))
             {
                 const weiqi_move weiqi_result = weiqi_from_gtp(weiqi_response); // weiqi_result 是 KataGo GTP 应答转换后的落子。
                 if (weiqi_result.weiqi_pass || weiqi_board_value.weiqi_legal(weiqi_result.weiqi_row, weiqi_result.weiqi_col)) return weiqi_result;
             }
             weiqi_katago_ready = false;
         }
+        weiqi_engine.qilei_send("stop");
+        return weiqi_fast_fallback();
     }
     return weiqi_choose_local(weiqi_board_value);
 }

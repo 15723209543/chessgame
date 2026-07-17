@@ -33,6 +33,13 @@ static void clearselection(int& selectedid, std::vector<point>& moves)
     moves.clear();
 }
 
+// 这个函数清除尚未确认的目标点轮廓。
+static void clearpending(bool& pendingvisible, point& pendingpoint)
+{
+    pendingvisible = false;
+    pendingpoint = { -1, -1 };
+}
+
 // 这个函数选中一枚棋子，并计算它的合法落点。
 static void selectpiece(const gamestate& state, int pieceid, int& selectedid, std::vector<point>& moves)
 {
@@ -55,7 +62,8 @@ static bool handleundo(gamestate& state, timestate& timer, loggerstate& logger, 
 }
 
 // 这个函数处理棋盘区域点击。
-static bool handleboardclick(gamestate& state, timestate& timer, loggerstate& logger, int x, int y, int& selectedid, std::vector<point>& moves)
+static bool handleboardclick(gamestate& state, timestate& timer, loggerstate& logger, int x, int y, int& selectedid,
+                             std::vector<point>& moves, bool& pendingvisible, point& pendingpoint)
 {
     int row = 0; // row 表示鼠标点击对应的棋盘行号。
     int col = 0; // col 表示鼠标点击对应的棋盘列号。
@@ -76,18 +84,27 @@ static bool handleboardclick(gamestate& state, timestate& timer, loggerstate& lo
         if (clickedid != empty_id && state.pieces[clickedid].color == state.currentcolor)
         {
             selectpiece(state, clickedid, selectedid, moves);
+            clearpending(pendingvisible, pendingpoint);
         }
         return false;
     }
 
     if (isinmoves(moves, row, col))
     {
+        if (!pendingvisible || pendingpoint.row != row || pendingpoint.col != col)
+        {
+            pendingvisible = true;
+            pendingpoint = { row, col };
+            return false;
+        }
+
         moveinfo info; // info 表示成功走出的走法。
         if (movepiece(state, selectedid, row, col, &info))
         {
             switchtimer(timer, state.currentcolor);
             logmove(logger, state, info);
             clearselection(selectedid, moves);
+            clearpending(pendingvisible, pendingpoint);
             return true;
         }
         return false;
@@ -96,6 +113,11 @@ static bool handleboardclick(gamestate& state, timestate& timer, loggerstate& lo
     if (clickedid != empty_id && state.pieces[clickedid].color == state.currentcolor)
     {
         selectpiece(state, clickedid, selectedid, moves);
+        clearpending(pendingvisible, pendingpoint);
+    }
+    else
+    {
+        clearpending(pendingvisible, pendingpoint);
     }
     return false;
 }
@@ -200,6 +222,12 @@ static void logrobotsetting(loggerstate& logger, const robotsetting& setting)
     {
         text += L"红黑双方都由玩家控制。";
     }
+    if (setting.mode != robot_mode_players)
+    {
+        const std::wstring levelname = setting.level == robot_level_beginner ? L"入门" :
+                                       (setting.level == robot_level_advanced ? L"进阶" : L"大师"); // levelname 表示本局机器人难度名称。
+        text += L" 机器人难度：" + levelname + L"。";
+    }
     logmessage(logger, text);
 }
 
@@ -224,21 +252,25 @@ static bool handletimeout(gamestate& state, timestate& timer, loggerstate& logge
 // 这个函数返回机器人每个可视化动作需要等待的毫秒数。
 static int getrobotdelayms(const timestate& timer)
 {
-    int maxdelay = timer.steplimit * 150; // maxdelay 表示保证两段机器人动作不超过步时长30%的单段上限。
-    if (maxdelay < 200)
-    {
-        return maxdelay;
-    }
-    return maxdelay < 2000 ? maxdelay : 2000;
+    (void)timer;
+    return 2000;
 }
 
-// 这个函数在机器人整步耗时不超过步时长百分之三十的前提下计算 Pikafish 搜索时间。
-static int getrobotsearchms(const timestate& timer)
+// 这个函数在扣除选子、选落点两段动画后计算 Pikafish 搜索时间。
+static int getrobotsearchms(const timestate& timer, const robotsetting& robots)
 {
-    int delayms = getrobotdelayms(timer); // delayms 表示选中棋子和执行落子前的单段等待时间。
-    int maxsearchms = timer.steplimit * 300 - delayms * 2 - 800; // maxsearchms 表示扣除两段可视化等待和通信余量后的搜索上限。
-    int preferredms = timer.steplimit <= 30 ? 4200 : (timer.steplimit <= 60 ? 7000 : 9000); // preferredms 表示不同步时长下的高强度 Pikafish 搜索时间。
-    int searchms = preferredms < maxsearchms ? preferredms : maxsearchms; // searchms 表示最终交给 Pikafish 的搜索毫秒数。
+    int delayms = getrobotdelayms(timer); // delayms 表示选子和选落点后的单段等待时间。
+    int maxsearchms = timer.steplimit * 1000 - delayms * 2 - 500; // maxsearchms 表示扣除两段可视化等待和通信余量后的搜索上限。
+    int preferredms = 350; // preferredms 表示当前难度的目标 Pikafish 搜索时间。
+    if (robots.level == robot_level_advanced)
+    {
+        preferredms = 1100;
+    }
+    else if (robots.level == robot_level_master)
+    {
+        preferredms = 2500;
+    }
+    int searchms = preferredms < maxsearchms ? preferredms : maxsearchms; // searchms 表示最终交给 Pikafish 且不超过三秒的搜索毫秒数。
     return searchms < 300 ? 300 : searchms;
 }
 
@@ -253,7 +285,9 @@ static bool shouldblockhumaninput(const gamestate& state, const robotsetting& ro
 }
 
 // 这个函数推进机器人当前回合的可视化走棋过程。
-static bool updaterobotturn(gamestate& state, timestate& timer, loggerstate& logger, const robotsetting& robots, robotruntime& robotrun, analysisresult& analysis, int& selectedid, std::vector<point>& moves)
+static bool updaterobotturn(gamestate& state, timestate& timer, loggerstate& logger, const robotsetting& robots, robotruntime& robotrun,
+                            analysisresult& analysis, int& selectedid, std::vector<point>& moves,
+                            bool& pendingvisible, point& pendingpoint)
 {
     if (state.gameover || !isrobotcolor(robots, state.currentcolor))
     {
@@ -269,8 +303,8 @@ static bool updaterobotturn(gamestate& state, timestate& timer, loggerstate& log
     if (robotrun.phase == robot_phase_none)
     {
         bool balancedmode = robots.mode == robot_mode_both; // balancedmode 表示是否启用双机器人平衡对局策略。
-        int searchms = getrobotsearchms(timer);              // searchms 表示本回合 Pikafish 可用的搜索毫秒数。
-        if (!startrobotsearch(state, state.currentcolor, balancedmode, searchms))
+        int searchms = getrobotsearchms(timer, robots);      // searchms 表示本回合当前难度可用的 Pikafish 搜索毫秒数。
+        if (!startrobotsearch(state, state.currentcolor, balancedmode, searchms, robots.level))
         {
             std::wstring errortext = L"机器人无法启动后台搜索：\n" + getrobotengineerror(); // errortext 表示向玩家显示并写入日志的引擎错误。
             logmessage(logger, errortext);
@@ -282,6 +316,7 @@ static bool updaterobotturn(gamestate& state, timestate& timer, loggerstate& log
             return true;
         }
         clearselection(selectedid, moves);
+        clearpending(pendingvisible, pendingpoint);
         robotrun.phase = robot_phase_searching;
         return false;
     }
@@ -300,13 +335,17 @@ static bool updaterobotturn(gamestate& state, timestate& timer, loggerstate& log
             state.winnercolor = getoppositecolor(state.currentcolor);
             stoptimer(timer);
             clearselection(selectedid, moves);
+            clearpending(pendingvisible, pendingpoint);
             MessageBoxW(nullptr, errortext.c_str(), L"机器人错误", MB_OK | MB_ICONERROR);
             return true;
         }
-        robotrun.phase = robot_phase_wait_select;
+        selectedid = robotrun.move.pieceid;
+        moves = getlegalmoves(state, selectedid);
+        clearpending(pendingvisible, pendingpoint);
+        robotrun.phase = robot_phase_wait_target;
         robotrun.tick = static_cast<unsigned long long>(GetTickCount());
         robotrun.delayms = getrobotdelayms(timer);
-        return false;
+        return true;
     }
 
     if (now - robotrun.tick < static_cast<unsigned long long>(robotrun.delayms))
@@ -314,17 +353,17 @@ static bool updaterobotturn(gamestate& state, timestate& timer, loggerstate& log
         return false;
     }
 
-    if (robotrun.phase == robot_phase_wait_select)
+    if (robotrun.phase == robot_phase_wait_target)
     {
-        selectedid = robotrun.move.pieceid;
-        moves = getlegalmoves(state, selectedid);
-        robotrun.phase = robot_phase_wait_move;
+        pendingvisible = true;
+        pendingpoint = { robotrun.move.torow, robotrun.move.tocol };
+        robotrun.phase = robot_phase_wait_confirm;
         robotrun.tick = now;
         robotrun.delayms = getrobotdelayms(timer);
         return true;
     }
 
-    if (robotrun.phase == robot_phase_wait_move)
+    if (robotrun.phase == robot_phase_wait_confirm)
     {
         moveinfo info; // info 表示机器人实际走出的走法。
         bool moved = movepiece(state, robotrun.move.pieceid, robotrun.move.torow, robotrun.move.tocol, &info);
@@ -334,6 +373,7 @@ static bool updaterobotturn(gamestate& state, timestate& timer, loggerstate& log
             switchtimer(timer, state.currentcolor);
             logmove(logger, state, info);
             clearselection(selectedid, moves);
+            clearpending(pendingvisible, pendingpoint);
             analysis = getanalysis(state);
             if (state.gameover)
             {
@@ -343,6 +383,7 @@ static bool updaterobotturn(gamestate& state, timestate& timer, loggerstate& log
         }
 
         clearselection(selectedid, moves);
+        clearpending(pendingvisible, pendingpoint);
         return true;
     }
 
@@ -362,7 +403,10 @@ int zhongguoxiangqi_run_impl()
     loggerstate logger;           // logger 保存操作日志文件状态。
     int selectedid = empty_id;    // selectedid 表示当前选中棋子的编号。
     std::vector<point> moves;     // moves 保存当前选中棋子的可落点。
+    bool pendingvisible = false;  // pendingvisible 表示是否正在显示待确认落点轮廓。
+    point pendingpoint = { -1, -1 }; // pendingpoint 保存玩家或机器人第二步选择的目标点。
     buttonrect undobutton;        // undobutton 保存悔棋按钮区域。
+    buttonrect backbutton;        // backbutton 保存返回六棋主界面的按钮区域。
 
     initgraph(window_width, window_height);
     setbkcolor(RGB(233, 236, 225));
@@ -390,12 +434,16 @@ int zhongguoxiangqi_run_impl()
     logtimesetting(logger, setting);
     logrobotsetting(logger, robots);
 
-    undobutton.left = panel_left + 94;
+    undobutton.left = panel_left + 18;
     undobutton.top = 124;
-    undobutton.right = panel_left + 252;
+    undobutton.right = panel_left + 166;
     undobutton.bottom = 160;
+    backbutton.left = panel_left + 174;
+    backbutton.top = 124;
+    backbutton.right = window_width - 18;
+    backbutton.bottom = 160;
 
-    drawgame(state, timer, analysis, selectedid, moves, undobutton);
+    drawgame(state, timer, analysis, selectedid, moves, pendingvisible, pendingpoint, undobutton, backbutton);
 
     bool running = true; // running 表示游戏窗口主循环是否继续。
     bool needdraw = false; // needdraw 表示本轮循环是否需要重绘。
@@ -406,10 +454,11 @@ int zhongguoxiangqi_run_impl()
         if (handletimeout(state, timer, logger, timeoutcolor, selectedid, moves))
         {
             resetrobotruntime(robotrun);
+            clearpending(pendingvisible, pendingpoint);
             needdraw = true;
         }
 
-        if (updaterobotturn(state, timer, logger, robots, robotrun, analysis, selectedid, moves))
+        if (updaterobotturn(state, timer, logger, robots, robotrun, analysis, selectedid, moves, pendingvisible, pendingpoint))
         {
             needdraw = true;
         }
@@ -423,10 +472,15 @@ int zhongguoxiangqi_run_impl()
                 if (handletimeout(state, timer, logger, timeoutcolor, selectedid, moves))
                 {
                     resetrobotruntime(robotrun);
+                    clearpending(pendingvisible, pendingpoint);
                     needdraw = true;
                 }
 
-                if (shouldblockhumaninput(state, robots, robotrun))
+                if (isinbutton(message.x, message.y, backbutton))
+                {
+                    running = false;
+                }
+                else if (shouldblockhumaninput(state, robots, robotrun))
                 {
                     needdraw = true;
                 }
@@ -435,13 +489,14 @@ int zhongguoxiangqi_run_impl()
                     if (handleundo(state, timer, logger, selectedid, moves))
                     {
                         resetrobotruntime(robotrun);
+                        clearpending(pendingvisible, pendingpoint);
                         analysis = getanalysis(state);
                         needdraw = true;
                     }
                 }
                 else
                 {
-                    if (handleboardclick(state, timer, logger, message.x, message.y, selectedid, moves))
+                    if (handleboardclick(state, timer, logger, message.x, message.y, selectedid, moves, pendingvisible, pendingpoint))
                     {
                         analysis = getanalysis(state);
                         if (state.gameover)
@@ -467,6 +522,7 @@ int zhongguoxiangqi_run_impl()
                     if (!shouldblockhumaninput(state, robots, robotrun) && handleundo(state, timer, logger, selectedid, moves))
                     {
                         resetrobotruntime(robotrun);
+                        clearpending(pendingvisible, pendingpoint);
                         analysis = getanalysis(state);
                         needdraw = true;
                     }
@@ -477,7 +533,7 @@ int zhongguoxiangqi_run_impl()
         unsigned long long now = static_cast<unsigned long long>(GetTickCount()); // now 表示当前毫秒时间。
         if (needdraw || (timer.running && now - lastdraw >= 180))
         {
-            drawgame(state, timer, analysis, selectedid, moves, undobutton);
+            drawgame(state, timer, analysis, selectedid, moves, pendingvisible, pendingpoint, undobutton, backbutton);
             lastdraw = now;
             needdraw = false;
         }

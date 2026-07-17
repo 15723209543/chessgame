@@ -16,7 +16,8 @@ struct buttonrect
     int bottom; // bottom 表示按钮下边界。
 };
 
-void drawgame(const gamestate& state, const timestate& timer, const analysisresult& analysis, int selectedid, const std::vector<point>& moves, const buttonrect& undobutton);
+void drawgame(const gamestate& state, const timestate& timer, const analysisresult& analysis, int selectedid, const std::vector<point>& moves,
+              bool pendingvisible, const point& pendingpoint, const buttonrect& undobutton, const buttonrect& backbutton);
 bool getboardrowcol(int x, int y, int& row, int& col);
 bool isinbutton(int x, int y, const buttonrect& button);
 

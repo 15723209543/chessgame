@@ -38,5 +38,7 @@ private:
     bool wuziqi_hint_visible = false;      // wuziqi_hint_visible 表示棋盘是否绘制推荐落点。
     wuziqi_move wuziqi_pending_move;       // wuziqi_pending_move 是等待玩家第二次点击确认的落点。
     bool wuziqi_pending_visible = false;   // wuziqi_pending_visible 表示棋盘是否显示待确认落点轮廓。
+    int wuziqi_robot_confirm_phase = 0;    // wuziqi_robot_confirm_phase 表示机器人选择落点和确认落子两阶段。
+    unsigned long long wuziqi_robot_confirm_tick = 0; // wuziqi_robot_confirm_tick 表示机器人当前确认阶段开始时刻。
     std::wstring wuziqi_operation_text;    // wuziqi_operation_text 保存右侧“本次操作”区域显示的文字。
 };

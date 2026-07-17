@@ -30,6 +30,8 @@ bool guojixiangqi_robot::guojixiangqi_start()
 
 guojixiangqi_move guojixiangqi_robot::guojixiangqi_choose_move(const guojixiangqi_board& guojixiangqi_board_value, int guojixiangqi_think_ms)
 {
+    const std::vector<guojixiangqi_move> guojixiangqi_legal_moves = guojixiangqi_board_value.guojixiangqi_legal_moves(); // guojixiangqi_legal_moves 保存当前局面的全部合法走法，供引擎超时时立即回退。
+    if (guojixiangqi_legal_moves.empty()) return {};
     if (guojixiangqi_stockfish_ready && guojixiangqi_engine.qilei_running())
     {
         std::ostringstream guojixiangqi_position; // guojixiangqi_position 组合 UCI position startpos moves 命令。
@@ -39,13 +41,17 @@ guojixiangqi_move guojixiangqi_robot::guojixiangqi_choose_move(const guojixiangq
             guojixiangqi_position << " moves";
             for (const std::string& guojixiangqi_move_text : guojixiangqi_board_value.guojixiangqi_uci_history()) guojixiangqi_position << ' ' << guojixiangqi_move_text; // guojixiangqi_move_text 是已走的一步 UCI 坐标。
         }
+        const int guojixiangqi_bounded_think_ms = std::clamp(guojixiangqi_think_ms, 200, 2700); // guojixiangqi_bounded_think_ms 为通信留出余量，保证整次决策不超过三秒。
         guojixiangqi_engine.qilei_send(guojixiangqi_position.str());
-        guojixiangqi_engine.qilei_send("go movetime " + std::to_string(std::max(200, guojixiangqi_think_ms)));
-        const unsigned long long guojixiangqi_deadline = GetTickCount64() + static_cast<unsigned long long>(guojixiangqi_think_ms + 5000); // guojixiangqi_deadline 是等待 bestmove 的超时时刻。
+        guojixiangqi_engine.qilei_send("go movetime " + std::to_string(guojixiangqi_bounded_think_ms));
+        const unsigned long long guojixiangqi_deadline = GetTickCount64() + 2750ULL; // guojixiangqi_deadline 为协议停止和快速回退预留余量，保证整次决策不超过三秒。
         while (GetTickCount64() < guojixiangqi_deadline)
         {
             std::string guojixiangqi_line; // guojixiangqi_line 是 Stockfish 返回的一行输出。
-            if (!guojixiangqi_engine.qilei_wait_for("\n", 500, guojixiangqi_line)) continue;
+            const unsigned long long guojixiangqi_now = GetTickCount64(); // guojixiangqi_now 是本轮读取引擎输出前的毫秒时刻。
+            const unsigned long long guojixiangqi_remaining_ms = guojixiangqi_now < guojixiangqi_deadline ? guojixiangqi_deadline - guojixiangqi_now : 0ULL; // guojixiangqi_remaining_ms 是三秒硬截止前仍可等待的毫秒数。
+            const int guojixiangqi_wait_ms = static_cast<int>(std::min<unsigned long long>(100ULL, guojixiangqi_remaining_ms)); // guojixiangqi_wait_ms 限制单次读取等待，避免越过硬截止时刻。
+            if (!guojixiangqi_engine.qilei_wait_for("\n", std::max(1, guojixiangqi_wait_ms), guojixiangqi_line)) continue;
             const std::size_t guojixiangqi_position_index = guojixiangqi_line.find("bestmove "); // guojixiangqi_position_index 是 bestmove 标记在行中的位置。
             if (guojixiangqi_position_index != std::string::npos)
             {
@@ -59,14 +65,16 @@ guojixiangqi_move guojixiangqi_robot::guojixiangqi_choose_move(const guojixiangq
                     guojixiangqi_uci[2] >= 'a' && guojixiangqi_uci[2] <= 'h' && guojixiangqi_uci[3] >= '1' && guojixiangqi_uci[3] <= '8'; // guojixiangqi_valid_square 表示起点终点字符均在棋盘范围。
                 const bool guojixiangqi_valid_promotion = guojixiangqi_uci.size() != 5 || guojixiangqi_uci[4] == 'q' || guojixiangqi_uci[4] == 'r' || guojixiangqi_uci[4] == 'b' || guojixiangqi_uci[4] == 'n'; // guojixiangqi_valid_promotion 表示第五字符是有效升变类型。
                 if (guojixiangqi_keyword != "bestmove" || !guojixiangqi_valid_square || !guojixiangqi_valid_promotion) break;
-                for (const guojixiangqi_move& guojixiangqi_candidate : guojixiangqi_board_value.guojixiangqi_legal_moves()) // guojixiangqi_candidate 是用本地规则层二次校验的走法。
+                for (const guojixiangqi_move& guojixiangqi_candidate : guojixiangqi_legal_moves) // guojixiangqi_candidate 是用本地规则层二次校验的走法。
                 {
                     if (guojixiangqi_board::guojixiangqi_to_uci(guojixiangqi_candidate) == guojixiangqi_uci) return guojixiangqi_candidate;
                 }
                 break;
             }
         }
+        guojixiangqi_engine.qilei_send("stop");
         guojixiangqi_stockfish_ready = false;
+        return guojixiangqi_legal_moves.front();
     }
     return guojixiangqi_choose_local(guojixiangqi_board_value);
 }

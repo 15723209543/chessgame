@@ -3,7 +3,9 @@
 #include <graphics.h>
 #include <windows.h>
 
+#include <chrono>
 #include <cmath>
+#include <future>
 
 namespace
 {
@@ -120,7 +122,7 @@ void wuziqi_session::wuziqi_draw(const std::wstring& wuziqi_status) const
     settextstyle(19, 0, L"Microsoft YaHei", 0, 0, FW_BOLD, false, false, false);
     outtextxy(wuziqi_panel_left + 22, 212, (L"场上 " + std::to_wstring(wuziqi_black_stones) + L" 子 · 已走 " + std::to_wstring(wuziqi_black_stones) + L" 手").c_str());
     settextstyle(18, 0, L"Microsoft YaHei");
-    outtextxy(wuziqi_panel_left + 22, 242, (L"步时 " + qilei_clock::qilei_format(wuziqi_clock_value.qilei_step_remaining) + L" · 局时 " + qilei_clock::qilei_format(wuziqi_clock_value.qilei_total_remaining[0])).c_str());
+    outtextxy(wuziqi_panel_left + 22, 242, (L"步时 " + qilei_clock::qilei_format(wuziqi_clock_value.qilei_step_remaining_by_side[0]) + L" · 局时 " + qilei_clock::qilei_format(wuziqi_clock_value.qilei_total_remaining[0])).c_str());
     settextcolor(WHITE);
     settextstyle(21, 0, L"Microsoft YaHei", 0, 0, FW_BOLD, false, false, false);
     outtextxy(wuziqi_panel_left + 22, 278, L"白方状态");
@@ -128,7 +130,7 @@ void wuziqi_session::wuziqi_draw(const std::wstring& wuziqi_status) const
     settextstyle(19, 0, L"Microsoft YaHei", 0, 0, FW_BOLD, false, false, false);
     outtextxy(wuziqi_panel_left + 22, 308, (L"场上 " + std::to_wstring(wuziqi_white_stones) + L" 子 · 已走 " + std::to_wstring(wuziqi_white_stones) + L" 手").c_str());
     settextstyle(18, 0, L"Microsoft YaHei");
-    outtextxy(wuziqi_panel_left + 22, 338, (L"步时 " + qilei_clock::qilei_format(wuziqi_clock_value.qilei_step_remaining) + L" · 局时 " + qilei_clock::qilei_format(wuziqi_clock_value.qilei_total_remaining[1])).c_str());
+    outtextxy(wuziqi_panel_left + 22, 338, (L"步时 " + qilei_clock::qilei_format(wuziqi_clock_value.qilei_step_remaining_by_side[1]) + L" · 局时 " + qilei_clock::qilei_format(wuziqi_clock_value.qilei_total_remaining[1])).c_str());
 
     const wuziqi_analysis_result wuziqi_analysis = wuziqi_analyze(wuziqi_board_value); // wuziqi_analysis 是当前实时胜负预测。
     settextcolor(RGB(225, 234, 239));
@@ -144,9 +146,6 @@ void wuziqi_session::wuziqi_draw(const std::wstring& wuziqi_status) const
     settextcolor(RGB(205, 218, 226));
     settextstyle(18, 0, L"Microsoft YaHei", 0, 0, FW_BOLD, false, false, false);
     outtextxy(wuziqi_panel_left + 22, 450, wuziqi_analysis.wuziqi_summary.c_str());
-    settextstyle(17, 0, L"Microsoft YaHei");
-    RECT wuziqi_engine_rect = { wuziqi_panel_left + 22, 478, wuziqi_window_width - 18, 526 }; // wuziqi_engine_rect 是机器人名称区域。
-    drawtext(wuziqi_robot_value.wuziqi_engine_name().c_str(), &wuziqi_engine_rect, DT_LEFT | DT_VCENTER | DT_WORDBREAK);
 
     wuziqi_draw_button(wuziqi_panel_left + 18, 642, 136, L"提示 (H)", RGB(52, 132, 104));
     wuziqi_draw_button(wuziqi_panel_left + 166, 642, 136, L"悔棋 (U)", RGB(58, 124, 154));
@@ -168,6 +167,8 @@ void wuziqi_session::wuziqi_reset_round(const qilei_game_setting& wuziqi_setting
     wuziqi_hint_visible = false;
     wuziqi_pending_visible = false;
     wuziqi_pending_move = {};
+    wuziqi_robot_confirm_phase = 0;
+    wuziqi_robot_confirm_tick = 0;
     wuziqi_operation_text = L"等待黑方操作";
     wuziqi_logger.qilei_open(L"五子棋");
     wuziqi_logger.qilei_write(L"计时：每步 " + std::to_wstring(wuziqi_setting.qilei_step_seconds) + L" 秒，每方 " + std::to_wstring(wuziqi_setting.qilei_total_seconds / 60) + L" 分钟。");
@@ -196,7 +197,7 @@ int wuziqi_session::wuziqi_run(const qilei_game_setting& wuziqi_setting)
 {
     wuziqi_reset_round(wuziqi_setting);
     initgraph(wuziqi_window_width, wuziqi_window_height);
-    SetWindowTextW(GetHWnd(), L"五子棋 - 机器人");
+    SetWindowTextW(GetHWnd(), L"五子棋");
     BeginBatchDraw();
     if (wuziqi_setting.qilei_robot_mode != 0)
     {
@@ -204,6 +205,7 @@ int wuziqi_session::wuziqi_run(const qilei_game_setting& wuziqi_setting)
         FlushBatchDraw();
         wuziqi_robot_value.wuziqi_start();
     }
+    wuziqi_clock_value.qilei_reset(wuziqi_setting, wuziqi_board_value.wuziqi_side());
     wuziqi_logger.qilei_write(L"机器人：" + wuziqi_robot_value.wuziqi_engine_name());
     bool wuziqi_running = true; // wuziqi_running 表示五子棋窗口循环是否继续。
     bool wuziqi_forced_over = false; // wuziqi_forced_over 表示是否因超时强制结束。
@@ -211,6 +213,10 @@ int wuziqi_session::wuziqi_run(const qilei_game_setting& wuziqi_setting)
     bool wuziqi_result_logged = false; // wuziqi_result_logged 防止胜负结果重复写入日志。
     unsigned long long wuziqi_last_draw = 0; // wuziqi_last_draw 是上一次界面刷新时刻。
     unsigned long long wuziqi_next_robot_tick = GetTickCount64(); // wuziqi_next_robot_tick 是允许下一方机器人开始计算的最早毫秒时刻，避免双方机器人无间隔连续调度。
+    std::future<wuziqi_move> wuziqi_robot_future; // wuziqi_robot_future 保存后台机器人决策任务。
+    bool wuziqi_robot_search_active = false; // wuziqi_robot_search_active 表示机器人当前正在后台计算落点。
+    unsigned long long wuziqi_round_generation = 0; // wuziqi_round_generation 用于识别重开、悔棋前的过期机器人结果。
+    unsigned long long wuziqi_search_generation = 0; // wuziqi_search_generation 保存当前后台任务所属的局面代数。
     while (wuziqi_running)
     {
         const int wuziqi_timeout_side = wuziqi_clock_value.qilei_update(); // wuziqi_timeout_side 是刚超时的一方。
@@ -218,6 +224,10 @@ int wuziqi_session::wuziqi_run(const qilei_game_setting& wuziqi_setting)
         {
             wuziqi_forced_over = true;
             wuziqi_forced_text = wuziqi_timeout_side == 0 ? L"黑方超时，白方获胜" : L"白方超时，黑方获胜";
+            wuziqi_pending_visible = false;
+            wuziqi_pending_move = {};
+            wuziqi_robot_confirm_phase = 0;
+            ++wuziqi_round_generation;
             wuziqi_logger.qilei_write(wuziqi_forced_text);
         }
         if (wuziqi_board_value.wuziqi_game_over() && !wuziqi_result_logged)
@@ -227,31 +237,78 @@ int wuziqi_session::wuziqi_run(const qilei_game_setting& wuziqi_setting)
             wuziqi_result_logged = true;
         }
         const bool wuziqi_over = wuziqi_forced_over || wuziqi_board_value.wuziqi_game_over(); // wuziqi_over 表示对局是否已结束。
-        if (!wuziqi_over && GetTickCount64() >= wuziqi_next_robot_tick && qilei_side_is_robot(wuziqi_setting, wuziqi_board_value.wuziqi_side()))
+        const unsigned long long wuziqi_robot_now = GetTickCount64(); // wuziqi_robot_now 是机器人确认流程使用的当前毫秒时刻。
+        if (wuziqi_robot_search_active &&
+            wuziqi_robot_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
         {
-            wuziqi_draw(wuziqi_robot_value.wuziqi_engine_name() + L" 正在思考…");
-            FlushBatchDraw();
-            const wuziqi_move wuziqi_robot_move = wuziqi_robot_value.wuziqi_choose_move(wuziqi_board_value, qilei_robot_think_ms(wuziqi_setting, 2500)); // wuziqi_robot_move 是机器人选出的落子。
-            const bool wuziqi_robot_move_valid = wuziqi_robot_move.wuziqi_row >= 0 && wuziqi_robot_move.wuziqi_row < 15 && wuziqi_robot_move.wuziqi_col >= 0 && wuziqi_robot_move.wuziqi_col < 15; // wuziqi_robot_move_valid 表示机器人坐标位于十五路棋盘内。
-            if (wuziqi_clock_value.qilei_update() < 0 && wuziqi_robot_move_valid && wuziqi_board_value.wuziqi_play(wuziqi_robot_move))
+            wuziqi_move wuziqi_robot_result{}; // wuziqi_robot_result 接收后台线程完成的机器人落点。
+            try
             {
-                wuziqi_log_move(L"机器人", wuziqi_robot_move);
-                const std::wstring wuziqi_coordinate = std::wstring(1, static_cast<wchar_t>(L'A' + wuziqi_robot_move.wuziqi_col)) + std::to_wstring(15 - wuziqi_robot_move.wuziqi_row); // wuziqi_coordinate 是机器人落子显示坐标。
-                wuziqi_operation_text = L"机器人落子：" + wuziqi_coordinate;
-                wuziqi_hint_visible = false;
-                wuziqi_pending_visible = false;
-                wuziqi_log_analysis();
-                wuziqi_clock_value.qilei_switch(wuziqi_board_value.wuziqi_side());
+                wuziqi_robot_result = wuziqi_robot_future.get();
             }
-            wuziqi_next_robot_tick = GetTickCount64() + 200; // wuziqi_next_robot_tick 为下一方保留一次界面刷新和消息处理间隔。
+            catch (...)
+            {
+                wuziqi_robot_result = {};
+            }
+            wuziqi_robot_search_active = false;
+            const bool wuziqi_result_current = wuziqi_search_generation == wuziqi_round_generation && !wuziqi_over &&
+                qilei_side_is_robot(wuziqi_setting, wuziqi_board_value.wuziqi_side()); // wuziqi_result_current 表示后台结果仍属于当前机器人局面。
+            const bool wuziqi_result_valid = wuziqi_robot_result.wuziqi_row >= 0 && wuziqi_robot_result.wuziqi_row < 15 &&
+                wuziqi_robot_result.wuziqi_col >= 0 && wuziqi_robot_result.wuziqi_col < 15; // wuziqi_result_valid 检查机器人坐标位于十五路棋盘内。
+            if (wuziqi_result_current && wuziqi_result_valid)
+            {
+                wuziqi_pending_move = wuziqi_robot_result;
+                const std::wstring wuziqi_coordinate = std::wstring(1, static_cast<wchar_t>(L'A' + wuziqi_pending_move.wuziqi_col)) +
+                    std::to_wstring(15 - wuziqi_pending_move.wuziqi_row); // wuziqi_coordinate 是机器人待确认落点坐标。
+                wuziqi_pending_visible = true;
+                wuziqi_robot_confirm_phase = 1;
+                wuziqi_robot_confirm_tick = GetTickCount64();
+                wuziqi_operation_text = L"机器人已选择 " + wuziqi_coordinate + L"，停留 2 秒";
+            }
+            else
+            {
+                wuziqi_next_robot_tick = GetTickCount64() + 200;
+            }
+        }
+        if (!wuziqi_over && qilei_side_is_robot(wuziqi_setting, wuziqi_board_value.wuziqi_side()))
+        {
+            if (!wuziqi_robot_search_active && wuziqi_robot_confirm_phase == 0 && wuziqi_robot_now >= wuziqi_next_robot_tick)
+            {
+                const wuziqi_board wuziqi_board_copy = wuziqi_board_value; // wuziqi_board_copy 是交给后台机器人读取的独立棋盘副本。
+                const int wuziqi_think_ms = qilei_robot_think_ms(wuziqi_setting, 2800); // wuziqi_think_ms 把机器人决策限制在三秒以内。
+                wuziqi_search_generation = wuziqi_round_generation;
+                wuziqi_robot_future = std::async(std::launch::async, [this, wuziqi_board_copy, wuziqi_think_ms]()
+                {
+                    return wuziqi_robot_value.wuziqi_choose_move(wuziqi_board_copy, wuziqi_think_ms);
+                });
+                wuziqi_robot_search_active = true;
+                wuziqi_operation_text = L"机器人正在思考（最多 3 秒）…";
+            }
+            else if (wuziqi_robot_confirm_phase == 1 && wuziqi_robot_now - wuziqi_robot_confirm_tick >= 2000)
+            {
+                const wuziqi_move wuziqi_robot_move = wuziqi_pending_move; // wuziqi_robot_move 是显示轮廓并确认后的机器人走法。
+                if (wuziqi_clock_value.qilei_update() < 0 && wuziqi_board_value.wuziqi_play(wuziqi_robot_move))
+                {
+                    wuziqi_log_move(L"机器人", wuziqi_robot_move);
+                    const std::wstring wuziqi_coordinate = std::wstring(1, static_cast<wchar_t>(L'A' + wuziqi_robot_move.wuziqi_col)) + std::to_wstring(15 - wuziqi_robot_move.wuziqi_row); // wuziqi_coordinate 是机器人落子显示坐标。
+                    wuziqi_operation_text = L"机器人确认落子：" + wuziqi_coordinate;
+                    wuziqi_hint_visible = false;
+                    wuziqi_log_analysis();
+                    wuziqi_clock_value.qilei_switch(wuziqi_board_value.wuziqi_side());
+                }
+                wuziqi_pending_visible = false;
+                wuziqi_pending_move = {};
+                wuziqi_robot_confirm_phase = 0;
+                wuziqi_next_robot_tick = GetTickCount64() + 200;
+            }
         }
 
         ExMessage wuziqi_message; // wuziqi_message 是当前鼠标或键盘输入消息。
         while (peekmessage(&wuziqi_message, EM_MOUSE | EM_KEY))
         {
             if (wuziqi_message.message == WM_KEYDOWN && wuziqi_message.vkcode == VK_ESCAPE) wuziqi_running = false;
-            else if (wuziqi_message.message == WM_KEYDOWN && wuziqi_message.vkcode == 'H' && !wuziqi_over) wuziqi_make_hint(wuziqi_setting);
-            else if (wuziqi_message.message == WM_KEYDOWN && wuziqi_message.vkcode == 'N') { wuziqi_reset_round(wuziqi_setting); wuziqi_forced_over = false; wuziqi_forced_text.clear(); wuziqi_result_logged = false; }
+            else if (wuziqi_message.message == WM_KEYDOWN && wuziqi_message.vkcode == 'H' && !wuziqi_over && !wuziqi_robot_search_active) wuziqi_make_hint(wuziqi_setting);
+            else if (wuziqi_message.message == WM_KEYDOWN && wuziqi_message.vkcode == 'N') { wuziqi_reset_round(wuziqi_setting); ++wuziqi_round_generation; wuziqi_forced_over = false; wuziqi_forced_text.clear(); wuziqi_result_logged = false; }
             else if (wuziqi_message.message == WM_KEYDOWN && wuziqi_message.vkcode == 'R' && !wuziqi_over) { wuziqi_forced_over = true; wuziqi_forced_text = wuziqi_board_value.wuziqi_side() == 0 ? L"黑方投降，白方获胜" : L"白方投降，黑方获胜"; wuziqi_clock_value.qilei_stop(); wuziqi_logger.qilei_write(wuziqi_forced_text); }
             else if ((wuziqi_message.message == WM_KEYDOWN && wuziqi_message.vkcode == 'U') ||
                      (wuziqi_message.message == WM_LBUTTONDOWN && wuziqi_message.x >= wuziqi_panel_left + 166 && wuziqi_message.x <= wuziqi_panel_left + 302 && wuziqi_message.y >= 642 && wuziqi_message.y <= 690))
@@ -263,14 +320,17 @@ int wuziqi_session::wuziqi_run(const qilei_game_setting& wuziqi_setting)
                     wuziqi_logger.qilei_write(L"悔棋。");
                     wuziqi_hint_visible = false;
                     wuziqi_pending_visible = false;
+                    wuziqi_pending_move = {};
+                    wuziqi_robot_confirm_phase = 0;
+                    ++wuziqi_round_generation;
                     wuziqi_operation_text = L"已撤回上一轮走子";
                     wuziqi_log_analysis();
                     wuziqi_forced_over = false;
                     wuziqi_result_logged = false;
                 }
             }
-            else if (wuziqi_message.message == WM_LBUTTONDOWN && wuziqi_message.x >= wuziqi_panel_left + 18 && wuziqi_message.x <= wuziqi_panel_left + 154 && wuziqi_message.y >= 642 && wuziqi_message.y <= 690 && !wuziqi_over) wuziqi_make_hint(wuziqi_setting);
-            else if (wuziqi_message.message == WM_LBUTTONDOWN && wuziqi_message.x >= wuziqi_panel_left + 18 && wuziqi_message.x <= wuziqi_panel_left + 154 && wuziqi_message.y >= 696 && wuziqi_message.y <= 744) { wuziqi_reset_round(wuziqi_setting); wuziqi_forced_over = false; wuziqi_forced_text.clear(); wuziqi_result_logged = false; }
+            else if (wuziqi_message.message == WM_LBUTTONDOWN && wuziqi_message.x >= wuziqi_panel_left + 18 && wuziqi_message.x <= wuziqi_panel_left + 154 && wuziqi_message.y >= 642 && wuziqi_message.y <= 690 && !wuziqi_over && !wuziqi_robot_search_active) wuziqi_make_hint(wuziqi_setting);
+            else if (wuziqi_message.message == WM_LBUTTONDOWN && wuziqi_message.x >= wuziqi_panel_left + 18 && wuziqi_message.x <= wuziqi_panel_left + 154 && wuziqi_message.y >= 696 && wuziqi_message.y <= 744) { wuziqi_reset_round(wuziqi_setting); ++wuziqi_round_generation; wuziqi_forced_over = false; wuziqi_forced_text.clear(); wuziqi_result_logged = false; }
             else if (wuziqi_message.message == WM_LBUTTONDOWN && wuziqi_message.x >= wuziqi_panel_left + 166 && wuziqi_message.x <= wuziqi_panel_left + 302 && wuziqi_message.y >= 696 && wuziqi_message.y <= 744 && !wuziqi_over) { wuziqi_forced_over = true; wuziqi_forced_text = wuziqi_board_value.wuziqi_side() == 0 ? L"黑方投降，白方获胜" : L"白方投降，黑方获胜"; wuziqi_operation_text = wuziqi_forced_text; wuziqi_clock_value.qilei_stop(); wuziqi_logger.qilei_write(wuziqi_forced_text); }
             else if (wuziqi_message.message == WM_LBUTTONDOWN && wuziqi_message.x >= wuziqi_panel_left + 18 && wuziqi_message.x <= wuziqi_panel_left + 302 && wuziqi_message.y >= 750 && wuziqi_message.y <= 798) wuziqi_running = false;
             else if (wuziqi_message.message == WM_LBUTTONDOWN && !wuziqi_over && !qilei_side_is_robot(wuziqi_setting, wuziqi_board_value.wuziqi_side()))
@@ -315,6 +375,13 @@ int wuziqi_session::wuziqi_run(const qilei_game_setting& wuziqi_setting)
         }
         Sleep(10);
     }
+    if (wuziqi_robot_search_active && wuziqi_robot_future.valid())
+    {
+        wuziqi_robot_future.wait();
+        try { (void)wuziqi_robot_future.get(); } catch (...) {}
+        wuziqi_robot_search_active = false;
+    }
+    wuziqi_robot_value.wuziqi_stop();
     wuziqi_clock_value.qilei_stop();
     wuziqi_logger.qilei_write(L"窗口关闭。");
     EndBatchDraw();

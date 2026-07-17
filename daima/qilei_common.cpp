@@ -60,6 +60,7 @@ void qilei_clock::qilei_reset(const qilei_game_setting& qilei_setting, int qilei
 {
     qilei_step_limit = qilei_setting.qilei_step_seconds;
     qilei_step_remaining = qilei_step_limit;
+    qilei_step_remaining_by_side = { qilei_step_limit, qilei_step_limit };
     qilei_total_remaining = { qilei_setting.qilei_total_seconds, qilei_setting.qilei_total_seconds };
     qilei_active_side = qilei_side;
     qilei_last_tick = GetTickCount64();
@@ -83,7 +84,8 @@ int qilei_clock::qilei_update()
     {
         return -1;
     }
-    qilei_step_remaining = std::max(0, qilei_step_remaining - qilei_seconds);
+    qilei_step_remaining_by_side[qilei_active_side] = std::max(0, qilei_step_remaining_by_side[qilei_active_side] - qilei_seconds);
+    qilei_step_remaining = qilei_step_remaining_by_side[qilei_active_side];
     qilei_total_remaining[qilei_active_side] = std::max(0, qilei_total_remaining[qilei_active_side] - qilei_seconds);
     if (qilei_step_remaining == 0 || qilei_total_remaining[qilei_active_side] == 0)
     {
@@ -97,7 +99,8 @@ void qilei_clock::qilei_switch(int qilei_side)
 {
     qilei_update();
     qilei_active_side = qilei_side;
-    qilei_step_remaining = qilei_step_limit;
+    qilei_step_remaining_by_side[qilei_active_side] = qilei_step_limit;
+    qilei_step_remaining = qilei_step_remaining_by_side[qilei_active_side];
     qilei_last_tick = GetTickCount64();
     qilei_millisecond_debt = 0;
 }

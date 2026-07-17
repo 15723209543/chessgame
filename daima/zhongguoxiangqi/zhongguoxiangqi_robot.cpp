@@ -61,6 +61,13 @@ void setrobotmode(robotsetting& setting, int mode)
     applyrobotmode(setting);
 }
 
+// 这个函数设置机器人难度，并把数值限制在入门、进阶、大师三档。
+void setrobotlevel(robotsetting& setting, int level)
+{
+    int safelevel = level < robot_level_beginner ? robot_level_beginner : level; // safelevel 表示经过下限保护的机器人难度。
+    setting.level = safelevel > robot_level_master ? robot_level_master : safelevel;
+}
+
 // 这个函数判断指定颜色是否由机器人控制。
 bool isrobotcolor(const robotsetting& setting, int color)
 {
@@ -443,7 +450,7 @@ static bool setenginemultipv(int value)
         return true;
     }
     if (!sendenginecommand("setoption name MultiPV value " + std::to_string(value)) ||
-        !sendenginecommand("isready") || !waitengineword("readyok", 3000))
+        !sendenginecommand("isready") || !waitengineword("readyok", 150))
     {
         return false;
     }
@@ -471,7 +478,8 @@ static bool searchengine(const gamestate& state, int movetimems, int multipv, st
         return false;
     }
 
-    if (robotsearchcancelled || !sendenginecommand("go movetime " + std::to_string(movetimems)))
+    int boundedmovetimems = movetimems < 300 ? 300 : (movetimems > 2500 ? 2500 : movetimems); // boundedmovetimems 为引擎通信预留时间，使整次决策不超过三秒。
+    if (robotsearchcancelled || !sendenginecommand("go movetime " + std::to_string(boundedmovetimems)))
     {
         return false;
     }
@@ -482,14 +490,16 @@ static bool searchengine(const gamestate& state, int movetimems, int multipv, st
     }
 
     unsigned long starttick = GetTickCount(); // starttick 表示本次引擎搜索开始时的毫秒时间。
-    int timeoutms = movetimems + 6000;         // timeoutms 表示搜索输出的硬超时上限。
+    int timeoutms = boundedmovetimems + 200;    // timeoutms 表示搜索输出的硬超时上限，最长为 2.7 秒。
     while (static_cast<unsigned long>(GetTickCount() - starttick) <= static_cast<unsigned long>(timeoutms))
     {
         int remainms = timeoutms - static_cast<int>(GetTickCount() - starttick); // remainms 表示尚可等待搜索输出的毫秒数。
         std::string line; // line 保存一行 Pikafish 搜索输出。
         if (!readengineline(line, remainms > 0 ? remainms : 0))
         {
+            sendenginecommand("stop");
             enginesearching = false;
+            engine.error = L"机器人搜索超过三秒限制。";
             return false;
         }
         parseengineinfo(line, candidates);
@@ -511,8 +521,9 @@ static bool searchengine(const gamestate& state, int movetimems, int multipv, st
             return false;
         }
     }
+    sendenginecommand("stop");
     enginesearching = false;
-    engine.error = L"机器人搜索超时。";
+    engine.error = L"机器人搜索超过三秒限制。";
     return false;
 }
 
@@ -523,20 +534,33 @@ static std::mt19937& getrobotrandomengine()
     return randomengine;
 }
 
-// 这个函数仅在开局从评分非常接近的 Pikafish 候选中选择一步。
-static std::string chooseenginemove(const std::vector<enginecandidate>& candidates, const std::string& bestmovetext, bool balancedmode, int historysize)
+// 这个函数按难度从 Pikafish 候选中选择一步；大师只在双机器人开局做极小变化。
+static std::string chooseenginemove(const std::vector<enginecandidate>& candidates, const std::string& bestmovetext,
+                                    bool balancedmode, int historysize, int level)
 {
-    if (!balancedmode || historysize >= 16 || candidates.empty() || !candidates[0].valid || std::abs(candidates[0].score) > 50000)
+    if (candidates.empty() || !candidates[0].valid || std::abs(candidates[0].score) > 50000)
+    {
+        return bestmovetext;
+    }
+
+    int safelevel = level < robot_level_beginner ? robot_level_beginner : level; // safelevel 表示限制到三档范围内的难度。
+    if (safelevel > robot_level_master)
+    {
+        safelevel = robot_level_master;
+    }
+    if (safelevel == robot_level_master && (!balancedmode || historysize >= 16))
     {
         return bestmovetext;
     }
 
     int bestscore = candidates[0].score; // bestscore 表示 Pikafish 第一推荐走法的评分。
-    std::vector<std::string> movechoices; // movechoices 保存与最优走法分差不超过 8 的开局候选。
+    int scorewindow = safelevel == robot_level_beginner ? 180 : (safelevel == robot_level_advanced ? 55 : 8); // scorewindow 表示本难度允许的候选最大分差。
+    double temperature = safelevel == robot_level_beginner ? 85.0 : (safelevel == robot_level_advanced ? 28.0 : 3.0); // temperature 表示候选随机权重的平滑程度。
+    std::vector<std::string> movechoices; // movechoices 保存本难度允许抽取的候选走法。
     std::vector<double> weights;          // weights 保存候选走法的引擎质量权重。
     for (const enginecandidate& candidate : candidates)
     {
-        if (!candidate.valid || candidate.score < bestscore - 8)
+        if (!candidate.valid || candidate.score < bestscore - scorewindow)
         {
             continue;
         }
@@ -545,7 +569,7 @@ static std::string chooseenginemove(const std::vector<enginecandidate>& candidat
             continue;
         }
         movechoices.push_back(candidate.movetext);
-        weights.push_back(std::exp(static_cast<double>(candidate.score - bestscore) / 3.0));
+        weights.push_back(std::exp(static_cast<double>(candidate.score - bestscore) / temperature));
     }
 
     if (movechoices.size() <= 1)
@@ -597,7 +621,7 @@ static robotmove convertenginemove(const gamestate& state, const std::string& mo
 }
 
 // 这个函数调用 Pikafish NNUE 搜索当前局面的高质量走法。
-robotmove getbestrobotmove(const gamestate& state, int color, bool balancedmode, int movetimems)
+robotmove getbestrobotmove(const gamestate& state, int color, bool balancedmode, int movetimems, int level)
 {
     robotmove invalidmove = { empty_id, -1, -1, 0.0, false }; // invalidmove 表示搜索失败时返回的无效走法。
     if (state.gameover || state.currentcolor != color || !engine.ready || robotsearchcancelled)
@@ -606,7 +630,14 @@ robotmove getbestrobotmove(const gamestate& state, int color, bool balancedmode,
     }
 
     int safetime = movetimems < 300 ? 300 : movetimems; // safetime 表示经过搜索时间下限保护的毫秒数。
-    int multipv = balancedmode && state.history.size() < 16 ? 3 : 1; // multipv 表示本回合需要 Pikafish 输出的高质量候选数。
+    int safelevel = level < robot_level_beginner ? robot_level_beginner : level; // safelevel 表示经过范围保护的难度。
+    if (safelevel > robot_level_master)
+    {
+        safelevel = robot_level_master;
+    }
+    int multipv = safelevel == robot_level_beginner ? 6 :
+                  (safelevel == robot_level_advanced ? 4 :
+                  (balancedmode && state.history.size() < 16 ? 3 : 1)); // multipv 表示不同难度请求的候选数量。
     std::vector<enginecandidate> candidates; // candidates 接收 Pikafish 返回的排名候选。
     std::string bestmovetext;                // bestmovetext 保存 Pikafish bestmove 行的第一推荐。
     if (!searchengine(state, safetime, multipv, candidates, bestmovetext))
@@ -614,7 +645,7 @@ robotmove getbestrobotmove(const gamestate& state, int color, bool balancedmode,
         return invalidmove;
     }
 
-    std::string selectedtext = chooseenginemove(candidates, bestmovetext, balancedmode, static_cast<int>(state.history.size())); // selectedtext 表示经过优质开局变化后选中的 UCI 走法。
+    std::string selectedtext = chooseenginemove(candidates, bestmovetext, balancedmode, static_cast<int>(state.history.size()), safelevel); // selectedtext 表示按难度和开局平衡规则选中的 UCI 走法。
     int selectedscore = candidates.empty() ? 0 : candidates[0].score; // selectedscore 表示选中走法对应的 Pikafish 分数。
     for (const enginecandidate& candidate : candidates)
     {
@@ -638,7 +669,7 @@ robotmove getbestrobotmove(const gamestate& state, int color, bool balancedmode,
 }
 
 // 这个函数复制当前局面并在后台线程启动 Pikafish 搜索，避免阻塞 EasyX 主循环。
-bool startrobotsearch(const gamestate& state, int color, bool balancedmode, int movetimems)
+bool startrobotsearch(const gamestate& state, int color, bool balancedmode, int movetimems, int level)
 {
     if (robotsearchactive)
     {
@@ -656,9 +687,9 @@ bool startrobotsearch(const gamestate& state, int color, bool balancedmode, int 
     enginesearching = false;
     try
     {
-        robotsearchfuture = std::async(std::launch::async, [statecopy, color, balancedmode, movetimems]()
+        robotsearchfuture = std::async(std::launch::async, [statecopy, color, balancedmode, movetimems, level]()
         {
-            return getbestrobotmove(statecopy, color, balancedmode, movetimems);
+            return getbestrobotmove(statecopy, color, balancedmode, movetimems, level);
         });
         robotsearchactive = true;
     }

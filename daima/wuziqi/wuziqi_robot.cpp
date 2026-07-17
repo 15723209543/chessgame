@@ -18,14 +18,22 @@ bool wuziqi_robot::wuziqi_start()
 
 wuziqi_move wuziqi_robot::wuziqi_choose_move(const wuziqi_board& wuziqi_board_value, int wuziqi_think_ms)
 {
+    const unsigned long long wuziqi_decision_deadline = GetTickCount64() + 2600ULL; // wuziqi_decision_deadline 为本地快速回退预留时间，保证整次决策不超过三秒。
     if (wuziqi_rapfi_ready && wuziqi_engine.qilei_running())
     {
         wuziqi_engine.qilei_send("RESTART");
         std::string wuziqi_output; // wuziqi_output 接收 Rapfi 重置和落子输出。
-        if (!wuziqi_engine.qilei_wait_for("OK", 10000, wuziqi_output)) wuziqi_rapfi_ready = false;
+        const unsigned long long wuziqi_restart_now = GetTickCount64(); // wuziqi_restart_now 是开始等待 Rapfi 重置应答的毫秒时刻。
+        const int wuziqi_restart_wait_ms = static_cast<int>(wuziqi_restart_now < wuziqi_decision_deadline ?
+            std::min<unsigned long long>(300ULL, wuziqi_decision_deadline - wuziqi_restart_now) : 0ULL); // wuziqi_restart_wait_ms 限制重置协议等待时间。
+        if (wuziqi_restart_wait_ms <= 0 || !wuziqi_engine.qilei_wait_for("OK", wuziqi_restart_wait_ms, wuziqi_output)) wuziqi_rapfi_ready = false;
         if (wuziqi_rapfi_ready)
         {
-            wuziqi_engine.qilei_send("INFO timeout_turn " + std::to_string(std::max(200, wuziqi_think_ms)));
+            const unsigned long long wuziqi_search_now = GetTickCount64(); // wuziqi_search_now 是配置 Rapfi 搜索时间前的毫秒时刻。
+            const int wuziqi_search_remaining = wuziqi_search_now < wuziqi_decision_deadline ?
+                static_cast<int>(wuziqi_decision_deadline - wuziqi_search_now) : 0; // wuziqi_search_remaining 是当前仍可使用的决策毫秒数。
+            const int wuziqi_bounded_think_ms = std::max(200, std::min(wuziqi_think_ms, std::max(200, wuziqi_search_remaining - 150))); // wuziqi_bounded_think_ms 为读取最终坐标预留协议余量。
+            wuziqi_engine.qilei_send("INFO timeout_turn " + std::to_string(wuziqi_bounded_think_ms));
             wuziqi_engine.qilei_send("INFO game_type 1");
             wuziqi_engine.qilei_send("BOARD");
             int wuziqi_move_side = 0; // wuziqi_move_side 是重放历史时当前落子所属方。
@@ -36,11 +44,13 @@ wuziqi_move wuziqi_robot::wuziqi_choose_move(const wuziqi_board& wuziqi_board_va
                 wuziqi_move_side = 1 - wuziqi_move_side;
             }
             wuziqi_engine.qilei_send("DONE");
-            const unsigned long long wuziqi_deadline = GetTickCount64() + static_cast<unsigned long long>(wuziqi_think_ms + 15000); // wuziqi_deadline 是等待 Rapfi 坐标的超时时刻。
-            while (GetTickCount64() < wuziqi_deadline)
+            while (GetTickCount64() < wuziqi_decision_deadline)
             {
                 std::string wuziqi_line; // wuziqi_line 是 Rapfi 当前返回的一行。
-                if (!wuziqi_engine.qilei_wait_for("\n", 1000, wuziqi_line)) continue;
+                const unsigned long long wuziqi_wait_now = GetTickCount64(); // wuziqi_wait_now 是本轮读取 Rapfi 输出前的毫秒时刻。
+                const int wuziqi_wait_ms = static_cast<int>(wuziqi_wait_now < wuziqi_decision_deadline ?
+                    std::min<unsigned long long>(100ULL, wuziqi_decision_deadline - wuziqi_wait_now) : 0ULL); // wuziqi_wait_ms 限制单次读取，避免超过三秒截止时刻。
+                if (wuziqi_wait_ms <= 0 || !wuziqi_engine.qilei_wait_for("\n", wuziqi_wait_ms, wuziqi_line)) continue;
                 int wuziqi_col = -1; // wuziqi_col 是解析出的 Rapfi 落子列。
                 int wuziqi_row = -1; // wuziqi_row 是解析出的 Rapfi 落子行。
                 char wuziqi_comma = 0; // wuziqi_comma 接收 Rapfi 坐标中的逗号分隔符。
@@ -51,6 +61,7 @@ wuziqi_move wuziqi_robot::wuziqi_choose_move(const wuziqi_board& wuziqi_board_va
                     if (wuziqi_comma == ',' && wuziqi_coordinate_valid && wuziqi_board_value.wuziqi_stone(wuziqi_row, wuziqi_col) == 0) return { wuziqi_row, wuziqi_col };
                 }
             }
+            wuziqi_engine.qilei_send("STOP");
             wuziqi_rapfi_ready = false;
         }
     }
@@ -60,6 +71,12 @@ wuziqi_move wuziqi_robot::wuziqi_choose_move(const wuziqi_board& wuziqi_board_va
 std::wstring wuziqi_robot::wuziqi_engine_name() const
 {
     return L"机器人";
+}
+
+void wuziqi_robot::wuziqi_stop()
+{
+    wuziqi_engine.qilei_stop("END");
+    wuziqi_rapfi_ready = false;
 }
 
 int wuziqi_robot::wuziqi_pattern_score(const wuziqi_board& wuziqi_board_value, int wuziqi_row, int wuziqi_col, int wuziqi_stone_value) const

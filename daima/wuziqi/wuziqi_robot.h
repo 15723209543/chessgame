@@ -16,6 +16,9 @@ public:
     // wuziqi_engine_name 返回当前实际使用的机器人名称。
     std::wstring wuziqi_engine_name() const;
 
+    // wuziqi_stop 使用 Piskvork END 命令安全结束 Rapfi 并释放通信句柄。
+    void wuziqi_stop();
+
 private:
     // wuziqi_choose_local 用必胜、必防和连型分值选择后备落子。
     wuziqi_move wuziqi_choose_local(const wuziqi_board& wuziqi_board_value) const;

@@ -34,7 +34,8 @@ public:
     // qilei_format 把秒数格式化为 mm:ss。
     static std::wstring qilei_format(int qilei_seconds);
 
-    int qilei_step_remaining = 60;            // qilei_step_remaining 是本步剩余秒数。
+    int qilei_step_remaining = 60;            // qilei_step_remaining 是当前行动方本步剩余秒数。
+    std::array<int, 2> qilei_step_remaining_by_side{}; // qilei_step_remaining_by_side 分别保存双方本次行动的剩余步时。
     std::array<int, 2> qilei_total_remaining{}; // qilei_total_remaining 是双方剩余总秒数。
     bool qilei_running = false;                // qilei_running 表示计时器是否正在工作。
 

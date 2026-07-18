@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="六种棋类、本地账号、对局存档与历史记录">
+  <title>弈境 · 本地棋类游戏</title>
+  <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+  <div class="page-noise" aria-hidden="true"></div>
+
+  <main id="auth-view" class="auth-view">
+    <section class="auth-brand">
+      <div class="brand-mark" aria-hidden="true"><span>弈</span></div>
+      <p class="eyebrow">LOCAL BOARD GAME CLUB</p>
+      <h1>六棋相会，<br><em>落子有声。</em></h1>
+      <p class="auth-intro">中国象棋、国际象棋、围棋、五子棋、飞行棋与跳棋，都在你的本地棋馆中。</p>
+      <div class="brand-points">
+        <span><b>6</b> 种棋类</span>
+        <span><b>本地</b> 数据保存</span>
+        <span><b>持续</b> 对局记录</span>
+      </div>
+      <div class="orbit orbit-one"></div>
+      <div class="orbit orbit-two"></div>
+    </section>
+
+    <section class="auth-panel" aria-labelledby="auth-title">
+      <div class="auth-card">
+        <div class="auth-heading">
+          <p class="eyebrow">WELCOME</p>
+          <h2 id="auth-title">进入你的棋馆</h2>
+          <p>首次使用请先注册；以后使用数字用户名和密码登录。</p>
+        </div>
+        <div class="auth-tabs" role="tablist" aria-label="登录或注册">
+          <button id="login-tab" class="auth-tab active" type="button" role="tab" aria-selected="true">登录</button>
+          <button id="register-tab" class="auth-tab" type="button" role="tab" aria-selected="false">注册</button>
+        </div>
+        <form id="auth-form" novalidate>
+          <label>数字用户名
+            <span class="input-wrap"><span aria-hidden="true">01</span><input id="username" name="username" inputmode="numeric" autocomplete="username" maxlength="18" placeholder="仅允许数字" required></span>
+          </label>
+          <label>数字密码
+            <span class="input-wrap"><span aria-hidden="true">••</span><input id="password" name="password" type="password" inputmode="numeric" autocomplete="current-password" maxlength="32" placeholder="仅允许数字" required></span>
+          </label>
+          <p id="auth-error" class="form-error" role="alert"></p>
+          <button id="auth-submit" class="primary-button" type="submit">登录棋馆 <span aria-hidden="true">→</span></button>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <div id="app-view" class="app-shell hidden">
+    <aside class="sidebar">
+      <a class="sidebar-brand" href="#" aria-label="返回棋类大厅"><span>弈</span><b>弈境</b></a>
+      <nav aria-label="主要导航">
+        <button class="nav-button active" type="button" data-view="lobby"><span>⌂</span><b>棋类大厅</b></button>
+        <button class="nav-button" type="button" data-view="history"><span>◷</span><b>历史记录</b></button>
+        <button class="nav-button" type="button" data-view="profile"><span>◉</span><b>个人中心</b></button>
+        <button id="admin-nav" class="nav-button hidden" type="button" data-view="admin"><span>◎</span><b>用户管理</b></button>
+      </nav>
+      <button id="logout-button" class="logout-button" type="button"><span>↪</span> 退出登录</button>
+    </aside>
+
+    <div class="app-main">
+      <header class="topbar">
+        <div>
+          <p id="page-kicker" class="eyebrow">BOARD GAME HALL</p>
+          <h2 id="page-title">棋类大厅</h2>
+        </div>
+        <div class="topbar-actions">
+          <span id="save-indicator" class="save-indicator"><i></i> 数据已同步</span>
+          <div class="user-chip"><span id="user-avatar">0</span><div><small>当前用户</small><b id="current-username">—</b></div></div>
+        </div>
+      </header>
+
+      <section id="lobby-view" class="content-view">
+        <div class="hero-card">
+          <div class="hero-copy">
+            <p class="eyebrow">SIX CLASSICS · ONE HALL</p>
+            <h3>欢迎回来，<span id="hero-username">棋手</span></h3>
+            <p>选择一盘棋，让思考在纵横之间慢下来。每次打开和完成对局，都会进入你的个人历史。</p>
+            <button id="continue-button" class="light-button" type="button">继续最近对局 <span>→</span></button>
+          </div>
+          <div class="hero-board" aria-hidden="true">
+            <div class="mini-grid"></div><span class="stone black"></span><span class="stone white"></span><b>六</b>
+          </div>
+        </div>
+        <div class="section-heading"><div><p class="eyebrow">CHOOSE A GAME</p><h3>选择棋类</h3></div><p>点击卡片后选择开始新游戏或读取个人存档</p></div>
+        <div id="game-grid" class="game-grid"></div>
+      </section>
+
+      <section id="history-view" class="content-view hidden">
+        <div class="metric-grid">
+          <article><span>累计打开</span><b id="history-total">0</b><small>次对局</small></article>
+          <article><span>已完成</span><b id="history-completed">0</b><small>次对局</small></article>
+          <article><span>最常游玩</span><b id="history-favorite">—</b><small>棋类</small></article>
+        </div>
+        <div class="table-card">
+          <div class="section-heading">
+            <div><p class="eyebrow">YOUR JOURNEY</p><h3>历史游戏记录</h3></div>
+            <div class="history-heading-actions">
+              <button id="refresh-history" class="ghost-button" type="button">刷新</button>
+              <button id="clear-history" class="ghost-button danger-outline" type="button">删除全部</button>
+            </div>
+          </div>
+          <div class="table-scroll"><table><thead><tr><th>棋类</th><th>打开时间</th><th>完成时间</th><th>结果</th><th>操作</th></tr></thead><tbody id="history-body"></tbody></table></div>
+          <div id="history-empty" class="empty-state hidden"><span>○</span><h4>还没有记录</h4><p>从棋类大厅打开一局游戏吧。</p></div>
+        </div>
+      </section>
+
+      <section id="profile-view" class="content-view hidden">
+        <div class="section-heading">
+          <div><p class="eyebrow">PERSONAL CENTER</p><h3>个人中心</h3></div>
+          <p>管理当前账号的登录密码</p>
+        </div>
+        <div class="account-grid">
+          <article class="account-summary-card">
+            <p class="eyebrow">ACCOUNT</p>
+            <span id="profile-avatar" class="profile-avatar">0</span>
+            <h3 id="profile-username">—</h3>
+            <p id="profile-role">普通用户</p>
+          </article>
+          <form id="profile-password-form" class="account-form-card">
+            <p class="eyebrow">CHANGE PASSWORD</p>
+            <h3>修改密码</h3>
+            <label for="profile-current-password">当前密码</label>
+            <div class="account-input"><span>旧</span><input id="profile-current-password" type="password" inputmode="numeric" pattern="[0-9]+" maxlength="32" autocomplete="current-password" required></div>
+            <label for="profile-new-password">新密码</label>
+            <div class="account-input"><span>新</span><input id="profile-new-password" type="password" inputmode="numeric" pattern="[0-9]+" maxlength="32" autocomplete="new-password" required></div>
+            <label for="profile-confirm-password">确认新密码</label>
+            <div class="account-input"><span>验</span><input id="profile-confirm-password" type="password" inputmode="numeric" pattern="[0-9]+" maxlength="32" autocomplete="new-password" required></div>
+            <p id="profile-password-error" class="form-error" role="alert"></p>
+            <button class="primary-button account-submit" type="submit">保存新密码 <span>→</span></button>
+          </form>
+        </div>
+      </section>
+
+      <section id="admin-view" class="content-view hidden">
+        <div class="section-heading"><div><p class="eyebrow">LOCAL ADMIN</p><h3>本地用户管理</h3></div><button id="refresh-admin" class="ghost-button" type="button">刷新</button></div>
+        <form id="admin-create-form" class="admin-create-card">
+          <div><p class="eyebrow">ADD USER</p><h3>新增用户</h3><p>用户名与密码均只允许数字，用户名不能重复。</p></div>
+          <label class="admin-create-field" for="admin-create-username"><span>用户名</span><input id="admin-create-username" inputmode="numeric" pattern="[0-9]+" maxlength="18" autocomplete="off" required></label>
+          <label class="admin-create-field" for="admin-create-password"><span>初始密码</span><input id="admin-create-password" type="password" inputmode="numeric" pattern="[0-9]+" maxlength="32" autocomplete="new-password" required></label>
+          <button class="primary-button" type="submit">新增用户 <span>＋</span></button>
+          <p id="admin-create-error" class="form-error admin-create-error" role="alert"></p>
+        </form>
+        <div class="table-card"><div class="table-scroll"><table><thead><tr><th>用户名</th><th>身份</th><th>注册时间</th><th>打开对局</th><th>完成对局</th><th>操作</th></tr></thead><tbody id="admin-body"></tbody></table></div></div>
+      </section>
+
+      <section id="setting-view" class="content-view easyx-setting-view hidden" aria-labelledby="setting-title">
+        <div class="easyx-setting-window">
+          <header class="easyx-setting-header">
+            <h3 id="setting-title">棋类 · 对局设置</h3>
+            <p>方向键调整 · Enter 开始 · Esc 返回主界面</p>
+          </header>
+          <div id="setting-options" class="easyx-setting-options"></div>
+          <footer class="easyx-setting-footer">
+            <button id="setting-back" class="easyx-setting-back" type="button">返回主界面</button>
+            <button id="setting-start" class="easyx-setting-start" type="button">开始游戏</button>
+          </footer>
+        </div>
+      </section>
+
+      <section id="game-view" class="content-view easyx-game-view hidden">
+        <div class="easyx-stage-shell">
+          <div id="game-workspace" class="game-workspace" data-game="">
+          <div id="game-board-host" class="game-board-host"></div>
+          <aside class="game-info-panel">
+            <h3 id="game-title" class="easyx-game-title">棋类</h3>
+            <div class="turn-card"><span>本次操作</span><b id="game-status">准备开始</b></div>
+            <div class="game-stats"><div id="game-stats"></div></div>
+            <div class="prediction-card">
+              <div><span>胜负预测</span><b id="prediction-text">50% · 50%</b></div>
+              <div class="prediction-track"><i id="prediction-fill"></i></div>
+              <small id="prediction-summary">双方机会均等</small>
+            </div>
+            <p id="game-engine-label" class="game-engine-label"></p>
+            <div id="game-controls" class="game-controls"></div>
+            <div id="game-system-controls" class="game-controls game-system-controls">
+              <button id="back-lobby" class="danger" type="button">返回主界面 (Esc)</button>
+            </div>
+          </aside>
+          <div id="xiangqi-analysis" class="xiangqi-analysis hidden">
+            <b id="xiangqi-analysis-title">局势分析　红方 50%　-　黑方 50%</b>
+            <div><i id="xiangqi-analysis-fill"></i></div>
+          </div>
+          <span id="game-resume-badge" class="resume-badge easyx-resume-badge">新对局</span>
+        </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <div id="game-choice-dialog" class="qilei-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="game-choice-title">
+    <div class="qilei-dialog-card">
+      <p class="eyebrow">OPEN GAME</p>
+      <h3 id="game-choice-title">进入棋类</h3>
+      <p id="game-choice-message">请选择进入方式。</p>
+      <div class="qilei-choice-actions">
+        <button id="game-choice-new" class="choice-new" type="button">开始新游戏</button>
+        <button id="game-choice-load" class="choice-load" type="button">读取上一次存档</button>
+      </div>
+      <button id="game-choice-cancel" class="dialog-cancel" type="button">取消</button>
+    </div>
+  </div>
+
+  <div id="history-delete-dialog" class="qilei-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="history-delete-title">
+    <div class="qilei-dialog-card">
+      <p class="eyebrow">DELETE RECORD</p>
+      <h3 id="history-delete-title">删除历史记录</h3>
+      <p id="history-delete-message">删除后会立即同步删除当前用户 result 中的单局文件。</p>
+      <div class="qilei-choice-actions">
+        <button id="history-delete-confirm" class="choice-danger" type="button">确认删除</button>
+        <button id="history-delete-cancel" class="choice-cancel" type="button">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="admin-password-dialog" class="qilei-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="admin-password-title">
+    <div class="qilei-dialog-card">
+      <p class="eyebrow">RESET PASSWORD</p>
+      <h3 id="admin-password-title">修改用户密码</h3>
+      <p>输入新的纯数字密码，保存后立即生效。</p>
+      <label class="dialog-field" for="admin-password-input">新密码</label>
+      <div class="account-input"><span>新</span><input id="admin-password-input" type="password" inputmode="numeric" pattern="[0-9]+" maxlength="32" autocomplete="new-password"></div>
+      <p id="admin-password-error" class="form-error" role="alert"></p>
+      <div class="qilei-choice-actions">
+        <button id="admin-password-confirm" class="choice-new" type="button">保存密码</button>
+        <button id="admin-password-cancel" class="choice-cancel" type="button">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="admin-delete-dialog" class="qilei-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="admin-delete-title">
+    <div class="qilei-dialog-card">
+      <p class="eyebrow">DELETE USER</p>
+      <h3 id="admin-delete-title">删除用户</h3>
+      <p id="admin-delete-message">删除后会同步移除该用户文件夹及全部账号、存档和历史数据。</p>
+      <div class="qilei-choice-actions">
+        <button id="admin-delete-confirm" class="choice-danger" type="button">确认删除</button>
+        <button id="admin-delete-cancel" class="choice-cancel" type="button">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

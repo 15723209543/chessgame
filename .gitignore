@@ -1,0 +1,29 @@
+# Visual Studio 本地缓存
+.vs/
+**/.vs/
+
+# 编译输出
+x64/
+**/x64/
+Debug/
+Release/
+**/Debug/
+**/Release/
+
+# Visual Studio 中间文件
+*.user
+*.obj
+*.pdb
+*.ipch
+*.ilk
+*.idb
+*.iobj
+*.ipdb
+*.tlog
+*.suo
+*.lastbuildstate
+*.recipe
+
+# Windows 缓存
+Thumbs.db
+Desktop.ini

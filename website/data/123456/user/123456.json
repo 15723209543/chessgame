@@ -1,0 +1,7 @@
+{
+  "username": "123456",
+  "salt": "3c3c5565cab35a91dac2aeb5a1fa683d",
+  "password_hash": "1a10b93f874e5effe398f867d1a4b06248c55c279020d7c1f2dc768c8db1a9e2",
+  "created_at": "2026-07-18T16:54:25+08:00",
+  "is_admin": false
+}

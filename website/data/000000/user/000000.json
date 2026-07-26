@@ -1,0 +1,7 @@
+{
+  "username": "000000",
+  "is_admin": true,
+  "created_at": "2026-07-17T12:02:38+08:00",
+  "salt": "7666e86905a6c43ea0c317ae89660337",
+  "password_hash": "e0cfe2ca5a3e9ee4338481bda743ceadebd12fcc9926ae8a8f9cd4261b0645b5"
+}

@@ -104,7 +104,9 @@ std::vector<guojixiangqi_move> guojixiangqi_board::guojixiangqi_pseudo_moves() c
                     const int guojixiangqi_capture_col = guojixiangqi_col + guojixiangqi_delta_col; // guojixiangqi_capture_col 是兵吃子目标列。
                     if (!guojixiangqi_inside(guojixiangqi_next_row, guojixiangqi_capture_col)) continue;
                     const int guojixiangqi_capture = guojixiangqi_next_row * 8 + guojixiangqi_capture_col; // guojixiangqi_capture 是兵吃子或过路兵目标格。
-                    if (guojixiangqi_color(guojixiangqi_current.guojixiangqi_squares[guojixiangqi_capture]) == 1 - guojixiangqi_side_value || guojixiangqi_capture == guojixiangqi_current.guojixiangqi_en_passant)
+                    const int guojixiangqi_en_passant_capture = guojixiangqi_capture + (guojixiangqi_side_value == 0 ? 8 : -8);
+                    const bool guojixiangqi_can_en_passant = guojixiangqi_capture == guojixiangqi_current.guojixiangqi_en_passant && guojixiangqi_current.guojixiangqi_squares[guojixiangqi_capture] == 0 && guojixiangqi_current.guojixiangqi_squares[guojixiangqi_en_passant_capture] == (guojixiangqi_side_value == 0 ? -guojixiangqi_pawn : guojixiangqi_pawn);
+                    if (guojixiangqi_color(guojixiangqi_current.guojixiangqi_squares[guojixiangqi_capture]) == 1 - guojixiangqi_side_value || guojixiangqi_can_en_passant)
                     {
                         if (guojixiangqi_next_row == guojixiangqi_promotion_row)
                         {
@@ -142,10 +144,10 @@ std::vector<guojixiangqi_move> guojixiangqi_board::guojixiangqi_pseudo_moves() c
             const int guojixiangqi_right_queen = guojixiangqi_side_value == 0 ? 2 : 8; // guojixiangqi_right_queen 是后翼易位权位。
             if (guojixiangqi_from == guojixiangqi_home && !guojixiangqi_square_attacked(guojixiangqi_home, 1 - guojixiangqi_side_value))
             {
-                if ((guojixiangqi_current.guojixiangqi_castling & guojixiangqi_right_king) &&
+                if ((guojixiangqi_current.guojixiangqi_castling & guojixiangqi_right_king) && guojixiangqi_current.guojixiangqi_squares[guojixiangqi_home + 3] == guojixiangqi_sign * guojixiangqi_rook &&
                     guojixiangqi_current.guojixiangqi_squares[guojixiangqi_home + 1] == 0 && guojixiangqi_current.guojixiangqi_squares[guojixiangqi_home + 2] == 0 &&
                     !guojixiangqi_square_attacked(guojixiangqi_home + 1, 1 - guojixiangqi_side_value) && !guojixiangqi_square_attacked(guojixiangqi_home + 2, 1 - guojixiangqi_side_value)) guojixiangqi_add(guojixiangqi_home + 2);
-                if ((guojixiangqi_current.guojixiangqi_castling & guojixiangqi_right_queen) &&
+                if ((guojixiangqi_current.guojixiangqi_castling & guojixiangqi_right_queen) && guojixiangqi_current.guojixiangqi_squares[guojixiangqi_home - 4] == guojixiangqi_sign * guojixiangqi_rook &&
                     guojixiangqi_current.guojixiangqi_squares[guojixiangqi_home - 1] == 0 && guojixiangqi_current.guojixiangqi_squares[guojixiangqi_home - 2] == 0 && guojixiangqi_current.guojixiangqi_squares[guojixiangqi_home - 3] == 0 &&
                     !guojixiangqi_square_attacked(guojixiangqi_home - 1, 1 - guojixiangqi_side_value) && !guojixiangqi_square_attacked(guojixiangqi_home - 2, 1 - guojixiangqi_side_value)) guojixiangqi_add(guojixiangqi_home - 2);
             }
@@ -378,3 +380,4 @@ std::string guojixiangqi_board::guojixiangqi_to_uci(const guojixiangqi_move& guo
     }
     return guojixiangqi_text;
 }
+

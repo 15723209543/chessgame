@@ -1,0 +1,42 @@
+{
+  "id": "29f6e6608f39453db93fa0c29901b225",
+  "game_id": "ludo",
+  "game_name": "飞行棋",
+  "opened_at": "2026-09-11T23:46:59+08:00",
+  "updated_at": "2026-09-11T23:47:11+08:00",
+  "finished_at": null,
+  "result": "进行中",
+  "state": {
+    "version": 2,
+    "phase": "setup",
+    "settings": {
+      "playerCount": 2,
+      "pieceCount": 2,
+      "robotCount": 2,
+      "stepSeconds": 10,
+      "totalSeconds": 600
+    },
+    "players": [],
+    "side": 0,
+    "dice": 0,
+    "rolled": false,
+    "selectedPiece": -1,
+    "moves": 0,
+    "over": false,
+    "winner": -1,
+    "stepRemaining": 30,
+    "totalRemaining": [],
+    "drawValues": [],
+    "drawn": 0,
+    "turnOrder": [],
+    "eliminated": [],
+    "eliminationOrder": [],
+    "eliminatedFinished": [],
+    "completed": [],
+    "rankings": [],
+    "jumpActive": false,
+    "jumpFrom": -1,
+    "jumpTo": -1,
+    "jumpOwner": -1
+  }
+}

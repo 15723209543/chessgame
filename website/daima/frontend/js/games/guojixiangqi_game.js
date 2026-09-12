@@ -41,12 +41,18 @@ function guojixiangqi_initial_board() {
 
 // guojixiangqi_initial_state：创建一局全新的国际象棋状态。
 function guojixiangqi_initial_state() {
-  return { board: guojixiangqi_initial_board(), side: guojixiangqi_white, moves: 0, over: false, winner: "", lastMove: null };
+  return { board: guojixiangqi_initial_board(), side: guojixiangqi_white, moves: 0, over: false, winner: "", lastMove: null, castling: { wK: true, wQ: true, bK: true, bQ: true }, enPassant: null };
 }
 
 // guojixiangqi_valid_state：判断服务器存档是否包含合法尺寸的棋盘和行动方。
 function guojixiangqi_valid_state(guojixiangqi_value) {
   return Boolean(guojixiangqi_value && Array.isArray(guojixiangqi_value.board) && guojixiangqi_value.board.length === 64 && [guojixiangqi_white, guojixiangqi_black].includes(guojixiangqi_value.side));
+}
+
+function guojixiangqi_state_rights(guojixiangqi_value) {
+  if (!guojixiangqi_value.castling) guojixiangqi_value.castling = { wK: true, wQ: true, bK: true, bQ: true };
+  if (!Object.prototype.hasOwnProperty.call(guojixiangqi_value, "enPassant")) guojixiangqi_value.enPassant = null;
+  return guojixiangqi_value;
 }
 
 // guojixiangqi_index：把八乘八行列坐标转换为一维下标。
@@ -93,7 +99,7 @@ function guojixiangqi_push_slider_moves(guojixiangqi_board, guojixiangqi_row, gu
 }
 
 // guojixiangqi_pseudo_moves_for_piece：生成一枚棋子的伪合法着法，不检查己方王是否受将。
-function guojixiangqi_pseudo_moves_for_piece(guojixiangqi_board, guojixiangqi_from) {
+function guojixiangqi_pseudo_moves_for_piece(guojixiangqi_board, guojixiangqi_from, guojixiangqi_castling = null, guojixiangqi_en_passant = null) {
   const guojixiangqi_piece = guojixiangqi_board[guojixiangqi_from]; // guojixiangqi_piece：待生成着法的棋子。
   if (!guojixiangqi_piece) return [];
   const guojixiangqi_side = guojixiangqi_piece_side(guojixiangqi_piece); // guojixiangqi_side：棋子所属阵营。
@@ -120,7 +126,10 @@ function guojixiangqi_pseudo_moves_for_piece(guojixiangqi_board, guojixiangqi_fr
       const guojixiangqi_capture_col = guojixiangqi_col + guojixiangqi_dc; // guojixiangqi_capture_col：兵斜吃目标列。
       if (!guojixiangqi_inside(guojixiangqi_one_row, guojixiangqi_capture_col)) continue;
       const guojixiangqi_target = guojixiangqi_board[guojixiangqi_index(guojixiangqi_one_row, guojixiangqi_capture_col)]; // guojixiangqi_target：兵斜前方棋子。
-      if (guojixiangqi_target && guojixiangqi_piece_side(guojixiangqi_target) !== guojixiangqi_side && guojixiangqi_piece_type(guojixiangqi_target) !== "K") guojixiangqi_moves.push({ from: guojixiangqi_from, to: guojixiangqi_index(guojixiangqi_one_row, guojixiangqi_capture_col) });
+      const guojixiangqi_target_square = guojixiangqi_index(guojixiangqi_one_row, guojixiangqi_capture_col);
+      const guojixiangqi_en_passant_capture = guojixiangqi_target_square + (guojixiangqi_side === guojixiangqi_white ? 8 : -8);
+      const guojixiangqi_can_en_passant = guojixiangqi_target_square === guojixiangqi_en_passant && !guojixiangqi_target && guojixiangqi_board[guojixiangqi_en_passant_capture] === `${guojixiangqi_opponent(guojixiangqi_side)}P`;
+      if ((guojixiangqi_target && guojixiangqi_piece_side(guojixiangqi_target) !== guojixiangqi_side && guojixiangqi_piece_type(guojixiangqi_target) !== "K") || guojixiangqi_can_en_passant) guojixiangqi_moves.push({ from: guojixiangqi_from, to: guojixiangqi_target_square });
     }
   } else if (guojixiangqi_type === "N") {
     for (const [guojixiangqi_dr, guojixiangqi_dc] of [[-2, -1], [-2, 1], [-1, -2], [-1, 2], [1, -2], [1, 2], [2, -1], [2, 1]]) guojixiangqi_add_target(guojixiangqi_row + guojixiangqi_dr, guojixiangqi_col + guojixiangqi_dc);
@@ -132,6 +141,11 @@ function guojixiangqi_pseudo_moves_for_piece(guojixiangqi_board, guojixiangqi_fr
     guojixiangqi_push_slider_moves(guojixiangqi_board, guojixiangqi_row, guojixiangqi_col, guojixiangqi_side, [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]], guojixiangqi_moves);
   } else if (guojixiangqi_type === "K") {
     for (let guojixiangqi_dr = -1; guojixiangqi_dr <= 1; guojixiangqi_dr += 1) for (let guojixiangqi_dc = -1; guojixiangqi_dc <= 1; guojixiangqi_dc += 1) if (guojixiangqi_dr || guojixiangqi_dc) guojixiangqi_add_target(guojixiangqi_row + guojixiangqi_dr, guojixiangqi_col + guojixiangqi_dc);
+    const guojixiangqi_rights = guojixiangqi_side === guojixiangqi_white ? [60, "wK", "wQ"] : [4, "bK", "bQ"];
+    if (guojixiangqi_from === guojixiangqi_rights[0] && !guojixiangqi_square_attacked(guojixiangqi_board, guojixiangqi_from, guojixiangqi_opponent(guojixiangqi_side))) {
+      if (guojixiangqi_board[guojixiangqi_from + 3] === `${guojixiangqi_side}R` && guojixiangqi_board[guojixiangqi_from + 1] === null && guojixiangqi_board[guojixiangqi_from + 2] === null && guojixiangqi_castling?.[guojixiangqi_rights[1]] && !guojixiangqi_square_attacked(guojixiangqi_board, guojixiangqi_from + 1, guojixiangqi_opponent(guojixiangqi_side)) && !guojixiangqi_square_attacked(guojixiangqi_board, guojixiangqi_from + 2, guojixiangqi_opponent(guojixiangqi_side))) guojixiangqi_moves.push({ from: guojixiangqi_from, to: guojixiangqi_from + 2 });
+      if (guojixiangqi_board[guojixiangqi_from - 4] === `${guojixiangqi_side}R` && guojixiangqi_board[guojixiangqi_from - 1] === null && guojixiangqi_board[guojixiangqi_from - 2] === null && guojixiangqi_board[guojixiangqi_from - 3] === null && guojixiangqi_castling?.[guojixiangqi_rights[2]] && !guojixiangqi_square_attacked(guojixiangqi_board, guojixiangqi_from - 1, guojixiangqi_opponent(guojixiangqi_side)) && !guojixiangqi_square_attacked(guojixiangqi_board, guojixiangqi_from - 2, guojixiangqi_opponent(guojixiangqi_side))) guojixiangqi_moves.push({ from: guojixiangqi_from, to: guojixiangqi_from - 2 });
+    }
   }
   return guojixiangqi_moves;
 }
@@ -178,23 +192,26 @@ function guojixiangqi_in_check(guojixiangqi_board, guojixiangqi_side) {
 }
 
 // guojixiangqi_apply_to_board：在棋盘副本上执行一步并处理升变。
-function guojixiangqi_apply_to_board(guojixiangqi_board, guojixiangqi_move, guojixiangqi_promotion = "Q") {
+function guojixiangqi_apply_to_board(guojixiangqi_board, guojixiangqi_move, guojixiangqi_promotion = "Q", guojixiangqi_state = null) {
   const guojixiangqi_next_board = [...guojixiangqi_board]; // guojixiangqi_next_board：执行着法后的棋盘副本。
   const guojixiangqi_piece = guojixiangqi_next_board[guojixiangqi_move.from]; // guojixiangqi_piece：被移动棋子。
+  const guojixiangqi_target_piece = guojixiangqi_next_board[guojixiangqi_move.to]; // guojixiangqi_target_piece：移动前目标格棋子。
   guojixiangqi_next_board[guojixiangqi_move.to] = guojixiangqi_piece;
   guojixiangqi_next_board[guojixiangqi_move.from] = null;
+  if (guojixiangqi_state && guojixiangqi_piece_type(guojixiangqi_piece) === "P" && guojixiangqi_move.to === guojixiangqi_state.enPassant && !guojixiangqi_target_piece) guojixiangqi_next_board[guojixiangqi_move.to + (guojixiangqi_piece_side(guojixiangqi_piece) === guojixiangqi_white ? 8 : -8)] = null;
+  if (guojixiangqi_state && guojixiangqi_piece_type(guojixiangqi_piece) === "K" && Math.abs(guojixiangqi_move.to - guojixiangqi_move.from) === 2) { const guojixiangqi_rook_from = guojixiangqi_move.to > guojixiangqi_move.from ? guojixiangqi_move.from + 3 : guojixiangqi_move.from - 4; const guojixiangqi_rook_to = guojixiangqi_move.to > guojixiangqi_move.from ? guojixiangqi_move.from + 1 : guojixiangqi_move.from - 1; guojixiangqi_next_board[guojixiangqi_rook_to] = guojixiangqi_next_board[guojixiangqi_rook_from]; guojixiangqi_next_board[guojixiangqi_rook_from] = null; }
   const guojixiangqi_target_row = Math.floor(guojixiangqi_move.to / 8); // guojixiangqi_target_row：着法目标行。
   if (guojixiangqi_piece_type(guojixiangqi_piece) === "P" && (guojixiangqi_target_row === 0 || guojixiangqi_target_row === 7)) guojixiangqi_next_board[guojixiangqi_move.to] = `${guojixiangqi_piece_side(guojixiangqi_piece)}${guojixiangqi_promotion}`;
   return guojixiangqi_next_board;
 }
 
 // guojixiangqi_legal_moves：生成指定阵营所有不会令己方王受将的合法着法。
-function guojixiangqi_legal_moves(guojixiangqi_board, guojixiangqi_side) {
+function guojixiangqi_legal_moves(guojixiangqi_board, guojixiangqi_side, guojixiangqi_state = null) {
   const guojixiangqi_moves = []; // guojixiangqi_moves：指定阵营全部合法着法。
   for (let guojixiangqi_from = 0; guojixiangqi_from < 64; guojixiangqi_from += 1) {
     if (guojixiangqi_piece_side(guojixiangqi_board[guojixiangqi_from]) !== guojixiangqi_side) continue;
-    for (const guojixiangqi_move of guojixiangqi_pseudo_moves_for_piece(guojixiangqi_board, guojixiangqi_from)) {
-      const guojixiangqi_next_board = guojixiangqi_apply_to_board(guojixiangqi_board, guojixiangqi_move); // guojixiangqi_next_board：用于将军验证的局面。
+    for (const guojixiangqi_move of guojixiangqi_pseudo_moves_for_piece(guojixiangqi_board, guojixiangqi_from, guojixiangqi_state?.castling, guojixiangqi_state?.enPassant)) {
+      const guojixiangqi_next_board = guojixiangqi_apply_to_board(guojixiangqi_board, guojixiangqi_move, "Q", { enPassant: null }); // guojixiangqi_next_board：用于将军验证的局面。
       if (!guojixiangqi_in_check(guojixiangqi_next_board, guojixiangqi_side)) guojixiangqi_moves.push(guojixiangqi_move);
     }
   }
@@ -268,7 +285,7 @@ function guojixiangqi_predict(guojixiangqi_state) {
 // guojixiangqi_create_game：创建可交互的国际象棋页面实例。
 export function guojixiangqi_create_game({ boardHost: guojixiangqi_board_host, controlsHost: guojixiangqi_controls_host, savedState: guojixiangqi_saved_state, setting: guojixiangqi_setting, services: guojixiangqi_services }) {
   const { canvas: guojixiangqi_canvas, context: guojixiangqi_context } = qilei_make_canvas(guojixiangqi_board_host, { width: 790, height: 810 }, "国际象棋棋盘"); // guojixiangqi_canvas/context：对应 C++ 左侧 790×810 绘图区域。
-  let guojixiangqi_state = guojixiangqi_valid_state(guojixiangqi_saved_state) ? qilei_deep_copy(guojixiangqi_saved_state) : guojixiangqi_initial_state(); // guojixiangqi_state：当前可保存棋局状态。
+  let guojixiangqi_state = guojixiangqi_state_rights(guojixiangqi_valid_state(guojixiangqi_saved_state) ? qilei_deep_copy(guojixiangqi_saved_state) : guojixiangqi_initial_state()); // guojixiangqi_state：当前可保存棋局状态。
   let guojixiangqi_selected = null; // guojixiangqi_selected：玩家当前选中的白棋下标。
   let guojixiangqi_pending_move = null; // guojixiangqi_pending_move：等待再次点击确认的目标着法。
   let guojixiangqi_pending_promotion = null; // guojixiangqi_pending_promotion：等待右侧选择升变棋子的着法。
@@ -291,7 +308,7 @@ export function guojixiangqi_create_game({ boardHost: guojixiangqi_board_host, c
     const guojixiangqi_square_size = 88; // guojixiangqi_square_size：C++ 每个棋盘格像素尺寸。
     guojixiangqi_context.fillStyle = "rgb(237,232,219)";
     guojixiangqi_context.fillRect(0, 0, guojixiangqi_canvas.width, guojixiangqi_canvas.height);
-    const guojixiangqi_legal_targets = guojixiangqi_selected === null ? [] : guojixiangqi_legal_moves(guojixiangqi_state.board, guojixiangqi_white).filter(guojixiangqi_move => guojixiangqi_move.from === guojixiangqi_selected).map(guojixiangqi_move => guojixiangqi_move.to); // guojixiangqi_legal_targets：选中棋子的全部合法目标。
+    const guojixiangqi_legal_targets = guojixiangqi_selected === null ? [] : guojixiangqi_legal_moves(guojixiangqi_state.board, guojixiangqi_state.side, guojixiangqi_state).filter(guojixiangqi_move => guojixiangqi_move.from === guojixiangqi_selected).map(guojixiangqi_move => guojixiangqi_move.to); // guojixiangqi_legal_targets：选中棋子的全部合法目标。
     for (let guojixiangqi_row = 0; guojixiangqi_row < 8; guojixiangqi_row += 1) for (let guojixiangqi_col = 0; guojixiangqi_col < 8; guojixiangqi_col += 1) {
       const guojixiangqi_square = guojixiangqi_index(guojixiangqi_row, guojixiangqi_col); // guojixiangqi_square：当前格一维下标。
       const guojixiangqi_x = guojixiangqi_left + guojixiangqi_col * guojixiangqi_square_size; // guojixiangqi_x：当前格左坐标。
@@ -346,7 +363,7 @@ export function guojixiangqi_create_game({ boardHost: guojixiangqi_board_host, c
 
   // guojixiangqi_check_end：检查将死或逼和并记录终局。
   function guojixiangqi_check_end() {
-    const guojixiangqi_moves = guojixiangqi_legal_moves(guojixiangqi_state.board, guojixiangqi_state.side); // guojixiangqi_moves：当前行动方全部合法着法。
+    const guojixiangqi_moves = guojixiangqi_legal_moves(guojixiangqi_state.board, guojixiangqi_state.side, guojixiangqi_state); // guojixiangqi_moves：当前行动方全部合法着法。
     if (guojixiangqi_moves.length) return;
     guojixiangqi_state.over = true;
     guojixiangqi_state.winner = guojixiangqi_in_check(guojixiangqi_state.board, guojixiangqi_state.side) ? guojixiangqi_opponent(guojixiangqi_state.side) : "draw";
@@ -361,7 +378,11 @@ export function guojixiangqi_create_game({ boardHost: guojixiangqi_board_host, c
   function guojixiangqi_commit_move(guojixiangqi_move, guojixiangqi_promotion = "Q") {
     if (!guojixiangqi_move || guojixiangqi_state.over) return;
     guojixiangqi_memory_history.push(qilei_deep_copy(guojixiangqi_state));
-    guojixiangqi_state.board = guojixiangqi_apply_to_board(guojixiangqi_state.board, guojixiangqi_move, guojixiangqi_promotion);
+    const guojixiangqi_piece = guojixiangqi_state.board[guojixiangqi_move.from]; const guojixiangqi_side = guojixiangqi_piece_side(guojixiangqi_piece);
+    guojixiangqi_state.board = guojixiangqi_apply_to_board(guojixiangqi_state.board, guojixiangqi_move, guojixiangqi_promotion, guojixiangqi_state);
+    guojixiangqi_state.enPassant = guojixiangqi_piece_type(guojixiangqi_piece) === "P" && Math.abs(guojixiangqi_move.to - guojixiangqi_move.from) === 16 ? (guojixiangqi_move.to + guojixiangqi_move.from) / 2 : null;
+    if (guojixiangqi_piece_type(guojixiangqi_piece) === "K") { guojixiangqi_state.castling[`${guojixiangqi_side}K`] = false; guojixiangqi_state.castling[`${guojixiangqi_side}Q`] = false; }
+    if (guojixiangqi_move.from === 63 || guojixiangqi_move.to === 63) guojixiangqi_state.castling.wK = false; if (guojixiangqi_move.from === 56 || guojixiangqi_move.to === 56) guojixiangqi_state.castling.wQ = false; if (guojixiangqi_move.from === 7 || guojixiangqi_move.to === 7) guojixiangqi_state.castling.bK = false; if (guojixiangqi_move.from === 0 || guojixiangqi_move.to === 0) guojixiangqi_state.castling.bQ = false;
     guojixiangqi_state.lastMove = { ...guojixiangqi_move };
     guojixiangqi_state.moves += 1;
     guojixiangqi_state.side = guojixiangqi_opponent(guojixiangqi_state.side);
@@ -398,7 +419,7 @@ export function guojixiangqi_create_game({ boardHost: guojixiangqi_board_host, c
       try {
         const guojixiangqi_response = await guojixiangqi_services.engineMove({ board: qilei_deep_copy(guojixiangqi_state.board), side: guojixiangqi_state.side, moveCount: guojixiangqi_state.moves, balanced: guojixiangqi_setting?.robotMode === 3 }); // guojixiangqi_response：Python 后端 engine 返回坐标和升变。
         const guojixiangqi_candidate = guojixiangqi_response?.move; // guojixiangqi_candidate：尚未经过网页合法着法复核的候选。
-        if (guojixiangqi_legal_moves(guojixiangqi_state.board, guojixiangqi_state.side).some(guojixiangqi_legal => guojixiangqi_legal.from === guojixiangqi_candidate?.from && guojixiangqi_legal.to === guojixiangqi_candidate?.to)) guojixiangqi_move = guojixiangqi_candidate;
+        if (guojixiangqi_legal_moves(guojixiangqi_state.board, guojixiangqi_state.side, guojixiangqi_state).some(guojixiangqi_legal => guojixiangqi_legal.from === guojixiangqi_candidate?.from && guojixiangqi_legal.to === guojixiangqi_candidate?.to)) guojixiangqi_move = guojixiangqi_candidate;
       } catch (_) {
         guojixiangqi_move = null;
       }
@@ -431,7 +452,7 @@ export function guojixiangqi_create_game({ boardHost: guojixiangqi_board_host, c
       guojixiangqi_selected = guojixiangqi_square; guojixiangqi_pending_move = null; guojixiangqi_hint_move = null; guojixiangqi_draw(); guojixiangqi_update_panel(`已选择${guojixiangqi_state.side === guojixiangqi_white ? "白" : "黑"}棋，请选择合法目标格`); return;
     }
     if (guojixiangqi_selected === null) return;
-    const guojixiangqi_move = guojixiangqi_legal_moves(guojixiangqi_state.board, guojixiangqi_state.side).find(guojixiangqi_candidate => guojixiangqi_candidate.from === guojixiangqi_selected && guojixiangqi_candidate.to === guojixiangqi_square); // guojixiangqi_move：点击目标对应的合法着法。
+    const guojixiangqi_move = guojixiangqi_legal_moves(guojixiangqi_state.board, guojixiangqi_state.side, guojixiangqi_state).find(guojixiangqi_candidate => guojixiangqi_candidate.from === guojixiangqi_selected && guojixiangqi_candidate.to === guojixiangqi_square); // guojixiangqi_move：点击目标对应的合法着法。
     if (!guojixiangqi_move) { guojixiangqi_services.toast("该目标不符合国际象棋规则"); return; }
     if (!guojixiangqi_pending_move || guojixiangqi_pending_move.to !== guojixiangqi_square) {
       guojixiangqi_pending_move = guojixiangqi_move; guojixiangqi_draw(); guojixiangqi_update_panel(`已选择 ${String.fromCharCode(97 + guojixiangqi_col)}${8 - guojixiangqi_row}，再次点击确认`); return;
